@@ -12,7 +12,12 @@ npm run dev        # API 4321 + Vite 5310, /api proxied
 npm run typecheck  # must pass
 npm run build      # web → dist/web, server → dist/server
 npm start          # run built app on 4321
+npm test           # unit + API integration (fixtures in test/fixtures)
+npm run test:e2e   # real browser: start → live logs → stop → failure banner → i18n
 ```
+
+Tests never touch the real `~/.projectdeck`: they set `PROJECTDECK_HOME` to a temp dir and
+scan a temp copy of `test/fixtures` on a random port.
 
 ## Architecture map
 
@@ -39,12 +44,15 @@ npm start          # run built app on 4321
 6. **Scan filtering**: only runnable projects are indexed. Anything filtered must produce a `SkippedItem` with a reason code so the scan report stays explainable.
 7. **Platform**: macOS is the primary target (uses `lsof`). Linux works. Windows needs a `platform/` adapter before claiming support.
 8. **Do not add a database** without a design discussion. Current state: JSON files in `~/.projectdeck/`.
+9. **Core behavior needs a test.** Scan filtering, start/stop, SSE logs, failure classification, and dependency detection are covered in `test/`. If you change them, extend the tests — do not hand the user a checklist to click through.
+10. **A failed start must never look successful.** `pm.start()` returns `{ ok, runtime, failure }`; `failure.code` is a code (`port-in-use`, `missing-deps`, `missing-script`, `missing-runtime`, `permission`, `unknown`) translated in the UI. An explicit stop must not produce a failure (npm exits with 143).
 
 ## Definition of done
 
 - `npm run typecheck` passes
 - `npm run build` passes
-- Manual check: dashboard renders, scan report opens, a project can start/stop, logs stream, no orphan process
+- `npm test` passes (add a case for new server behavior)
+- `npm run test:e2e` passes when UI behavior changed
 - If UI text changed: both languages checked (`?lang=en` / `?lang=zh`)
 - If API changed: README API table updated
 

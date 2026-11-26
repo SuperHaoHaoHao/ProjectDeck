@@ -1,0 +1,8 @@
+{
+  "name": "fixture-service",
+  "version": "1.2.3",
+  "description": "Fixture HTTP service used by ProjectDeck tests",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

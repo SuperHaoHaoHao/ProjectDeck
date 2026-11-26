@@ -1,0 +1,8 @@
+{
+  "name": "fixture-broken",
+  "version": "0.0.1",
+  "description": "Fixture whose start command exits immediately",
+  "scripts": {
+    "dev": "node does-not-exist.js"
+  }
+}

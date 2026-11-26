@@ -90,6 +90,46 @@ Filtered folders are returned with a reason code so the scan report stays explai
 - Stop sends `SIGTERM` to the process group, then `SIGKILL` after 4s.
 - On server shutdown, all managed process groups are terminated.
 
+### Reporting failure instead of faking success
+
+A spawned command can exit immediately (`npm run dev` with no `node_modules`, a port already in
+use, a missing script). Returning `ok: true` there is the difference between a usable tool and a
+broken one, so `start` observes the process for 2s and classifies output:
+
+| Code | Trigger |
+| --- | --- |
+| `port-in-use` | `EADDRINUSE`, `address already in use` |
+| `missing-deps` | `Cannot find module`, `MODULE_NOT_FOUND`, `ModuleNotFoundError` |
+| `missing-script` | `Missing script`, `command not found` |
+| `missing-runtime` | spawn `ENOENT` |
+| `permission` | `EACCES`, `permission denied` |
+| `unknown` | exited non-zero with no recognised line |
+
+`start()` returns `{ ok, runtime, failure }`. An explicit stop is tracked separately, because a
+killed npm exits with code 143 rather than a signal — without that flag every stop would look like
+a crash.
+
+Some runners (e.g. a monorepo `concurrently` wrapper) stay alive while one child dies; the failure
+is then attached to a still-running project and shown as an alert rather than flipping the status.
+
+### Dependencies
+
+Detection records `{ manager, hasManifest, installed }` per project (`node_modules` is searched up
+to three parent levels for hoisted monorepos). Missing dependencies are shown as a hint and a
+one-click `npm|pnpm|yarn|bun install` that runs through the same process manager, so install output
+streams into the same terminal. Only known package managers with fixed arguments are ever spawned.
+
+## Testing
+
+| Layer | What it proves |
+| --- | --- |
+| Unit | detection, dependency state, port ownership, failure classification, config parsing |
+| Integration | a real server on a random port: scan filtering + reasons, start, SSE chunks, process-group stop with no orphan, failure reporting, install command |
+| E2E | a real browser against the built UI: start from the list, running state, live terminal, stop, failure banner, language switch |
+
+Everything runs against `test/fixtures` copied to a temp dir, with `PROJECTDECK_HOME` pointing at a
+temp state directory, so tests never start the user's projects or touch `~/.projectdeck`.
+
 ## Status correctness
 
 A TCP port being open does **not** mean the project is running. ProjectDeck builds a listener map with `lsof` and resolves each PID's working directory. A project is running only if it owns a listening port, or if its managed process is alive.

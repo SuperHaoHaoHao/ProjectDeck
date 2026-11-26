@@ -22,6 +22,9 @@
     "build:web": "vite build",
     "build:server": "tsup src/server/main.ts --format esm --target node20 --out-dir dist/server --clean",
     "start": "node bin/projectdeck.mjs",
+    "test": "node --import tsx --test --test-timeout=90000 test/unit/*.test.ts test/integration/*.test.ts",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "node --import tsx --test --test-timeout=120000 test/e2e/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -39,6 +42,7 @@
     "clsx": "^2.1.1",
     "concurrently": "^10.0.7",
     "lucide-react": "^1.81.0",
+    "playwright-core": "^1.65.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",

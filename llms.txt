@@ -17,10 +17,13 @@ ProjectDeck is a local-only web application (Node.js + React) for developers who
 - Scan report modal: roots, rules, scanned directory count, filtered items, errors, duration
 - Backend-style layout: sidebar + dashboard + project list + detail page
 - One-click start / stop / restart for projects with a start command
+- Startup failures are classified instead of reported as success: `port-in-use`, `missing-deps`, `missing-script`, `missing-runtime`, `permission`
+- Dependency preflight: `node_modules` missing while `package.json` declares deps is flagged, with a one-click `npm/pnpm/yarn/bun install` whose output streams to the terminal
 - Live terminal view with ANSI colors, auto-scroll, pause, and clear
 - Port ownership check via `lsof` so a port used by another project does not mark this one running
 - Sortable list view with creation date and last operation
 - Local HTTP API and hash routes (`#/dashboard`, `#/projects`, `#/project/:id`, `#/settings`)
+- Automated tests: `npm test` (unit + API integration with fixtures, SSE, process-group stop) and `npm run test:e2e` (real browser: start → logs → stop → failure banner → i18n)
 
 ## Quick start
 
@@ -87,6 +90,7 @@ Logs: `~/.projectdeck/logs/<project-id>.log`
 | POST | `/api/projects/:id/start` | Start |
 | POST | `/api/projects/:id/stop` | Stop |
 | POST | `/api/projects/:id/restart` | Restart |
+| POST | `/api/projects/:id/install` | Install dependencies (streams into the log) |
 | GET | `/api/projects/:id/logs` | Recent logs |
 | GET | `/api/projects/:id/logs/stream` | SSE log stream |
 | GET | `/api/runtime` | Runtime states |

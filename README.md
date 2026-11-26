@@ -25,6 +25,8 @@
 - **扫描报告**：根目录、规则、扫描目录数、过滤明细、错误、耗时一目了然
 - **后台式布局**：左侧栏 + 仪表盘 + 项目列表 + 项目详情
 - **一键启停**：识别 `npm run dev`、`python3 app.py`、`go run .` 等启动入口
+- **失败会说清楚原因**：从日志里识别「端口被占用 / 缺依赖 / 命令不存在 / 没权限」，直接标红，不再假装启动成功
+- **一键安装依赖**：依赖没装（有 `package.json` 但没有 `node_modules`）会提前标出来，点一下跑 `npm/pnpm/yarn install`，输出同样进终端
 - **实时日志终端**：ANSI 颜色、自动滚动、暂停、清空；停止后仍可回看
 - **项目列表**：状态、端口、创建时间、最后操作、启停按钮
 - **详情页**：概览（技术栈 / 端口 / git / 产物 / README）+ 终端日志
@@ -67,6 +69,20 @@ projectdeck --all    # 连纯文档、组件库也显示
 - 每个项目跑在独立进程组里，停止时整棵进程树一起退出（npm → vite → node）
 - stdout/stderr 会进入环形缓冲、写入 `~/.projectdeck/logs/<id>.log`，并通过 SSE 实时推到页面
 - 「运行中」不是只看端口通不通，而是核对监听进程的 cwd 是否属于该项目
+- 启动后会观察 2 秒：进程已经退出、或者日志里出现 `EADDRINUSE` / `Cannot find module` / `command not found`，会判定为启动失败并回传原因
+- 失败原因以 code 形式返回（`port-in-use`、`missing-deps`、`missing-script`、`missing-runtime`、`permission`），由前端翻译成中英文
+- 主动「停止」不会被记成失败（npm 被杀时退出码是 143，不算错误）
+
+## 测试
+
+```bash
+npm test          # 单元 + API 集成（扫描、启动、SSE 日志、停止、失败归类、依赖检测）
+npm run test:e2e  # 真浏览器跑一遍 UI：列表启动 → 终端出日志 → 停止 → 失败提示 → 中英切换
+```
+
+测试使用 `test/fixtures/` 里的假项目，跑在临时目录和随机端口上（`PROJECTDECK_HOME` 隔离），不会碰你真实的 `~/.projectdeck`，也不会启动你的真实项目。
+
+CI 在每次 push / PR 时执行 `typecheck`、`build`、`npm test`、`npm run test:e2e`。
 
 ## 配置
 
@@ -95,6 +111,7 @@ projectdeck --all    # 连纯文档、组件库也显示
 | POST | `/api/projects/:id/start` | 启动 |
 | POST | `/api/projects/:id/stop` | 停止 |
 | POST | `/api/projects/:id/restart` | 重启 |
+| POST | `/api/projects/:id/install` | 安装依赖（npm/pnpm/yarn/bun，输出进日志） |
 | GET | `/api/projects/:id/logs` | 最近日志 |
 | GET | `/api/projects/:id/logs/stream` | SSE 实时日志 |
 | GET | `/api/runtime` | 运行态列表 |

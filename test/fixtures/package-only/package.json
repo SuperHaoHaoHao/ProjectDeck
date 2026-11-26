@@ -1,0 +1,5 @@
+{
+  "name": "fixture-package-only",
+  "version": "0.0.1",
+  "description": "Fixture package without any start script"
+}
