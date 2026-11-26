@@ -2,6 +2,8 @@
 
 > 给「被 AI 批量生产出来的本地项目」做一个总目录 + 总开关。
 
+[![CI](https://github.com/SuperHaoHaoHao/ProjectDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/SuperHaoHaoHao/ProjectDeck/actions/workflows/ci.yml)
+
 [English](#english) · [llms.txt](./llms.txt)
 
 用 AI 写代码之后，本机项目会越来越多：Web 服务、Electron 桌面端、uni-app 小程序、macOS App、Android、组件库、纯文档…… ProjectDeck 扫描你的本地目录，把它们变成一个你能真正用的控制台：
@@ -149,5 +151,7 @@ MIT
 ProjectDeck is a local-first project catalog and control deck for developers who accumulate dozens of AI-generated repositories. It auto-discovers runnable projects under your dev folders, detects their stack, renders READMEs, tracks ports and git state, and lets you start/stop them with live streaming logs — all in one local web UI. No database, no cloud, macOS-first.
 
 Quick start: `npm install && npm run build && npm start`, then open http://127.0.0.1:4321.
+
+Tests: `npm test` (unit + API integration against fixtures, including live SSE logs and process-group stop) and `npm run test:e2e` (real browser: start → terminal → stop → failure banner → i18n). Both run in CI.
 
 Machine-readable summary for agents: [`llms.txt`](./llms.txt).
