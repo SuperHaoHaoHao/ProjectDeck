@@ -30,6 +30,8 @@
 - **失败会说清楚原因**：从日志里识别「端口被占用 / 缺依赖 / 命令不存在 / 没权限」，直接标红，不再假装启动成功
 - **残留端口自动回收**：启动前如果本项目声明的端口被「工作目录就在本项目里」的旧进程占着，先清掉再启动；别人的进程一律不动
 - **monorepo 端口识别**：`server/.env` 的 `PORT=3000`、`apps/web/vite.config.ts` 的 `port` 都能读出来，不用手填
+- **以实际监听为准**：运行时用 `lsof` 现场核对，端口写死在 `tools/dev.js` 里（比如 8365）、`vite` 自己换了端口，都能显示出来
+- **固定端口（给 frpc 用）**：给项目绑一个不会变的端口，ProjectDeck 负责转发到项目当前真实端口；frpc / 反向代理只认这个固定端口，项目端口在 5173/5174 之间怎么跳都不用改配置
 - **一键安装依赖**：依赖没装（有 `package.json` 但没有 `node_modules`）会提前标出来，点一下跑 `npm/pnpm/yarn install`，输出同样进终端
 - **实时日志终端**：ANSI 颜色、自动滚动、暂停、清空；停止后仍可回看
 - **项目列表**：状态、端口、创建时间、最后操作、启停按钮
@@ -73,6 +75,8 @@ projectdeck --all    # 连纯文档、组件库也显示
 - 每个项目跑在独立进程组里，停止时整棵进程树一起退出（npm → vite → node）
 - stdout/stderr 会进入环形缓冲、写入 `~/.projectdeck/logs/<id>.log`，并通过 SSE 实时推到页面
 - 「运行中」不是只看端口通不通，而是核对监听进程的 cwd 是否属于该项目
+- 一个端口只归属给「路径最具体」的项目：`pikiboo/plugins/fret-flow` 的端口算 fret-flow 的，不会被 pikiboo 抢走
+- 端口列表每次刷新都现场用 `lsof` 核对，所以启动后端口马上变绿，停止后马上变灰，不需要重新扫描目录
 - 启动前会检查本项目声明的端口：如果占着端口的进程 `cwd` 就在本项目目录里（上次没退干净的自己人），先 `SIGTERM` 再 `SIGKILL` 清掉；不是本项目的进程绝不误杀，只报 `port-in-use` 并打印「端口在谁手里」
 - 启动后会观察 2 秒：进程已经退出、或者日志里出现 `EADDRINUSE` / `Cannot find module` / `command not found`，会判定为启动失败并回传原因
 - 失败原因以 code 形式返回（`port-in-use`、`missing-deps`、`missing-script`、`missing-runtime`、`permission`），由前端翻译成中英文
@@ -99,9 +103,14 @@ CI 在每次 push / PR 时执行 `typecheck`、`build`、`npm test`、`npm run t
   "host": "127.0.0.1",
   "roots": ["/Users/you/Code"],
   "maxDepth": 6,
-  "ignore": ["my-vendor-dir"]
+  "ignore": ["my-vendor-dir"],
+  "stablePorts": {
+    "7246fcafff": { "port": 9100, "target": 8365 }
+  }
 }
 ```
+
+`stablePorts` 的键是项目 id。`target` 可以不填——不填就自动跟着项目当前实际监听的端口走，项目换端口也不用改配置。
 
 运行态：`~/.projectdeck/runtime.json`
 日志：`~/.projectdeck/logs/<project-id>.log`
@@ -117,6 +126,7 @@ CI 在每次 push / PR 时执行 `typecheck`、`build`、`npm test`、`npm run t
 | POST | `/api/projects/:id/stop` | 停止 |
 | POST | `/api/projects/:id/restart` | 重启 |
 | POST | `/api/projects/:id/install` | 安装依赖（npm/pnpm/yarn/bun，输出进日志） |
+| PUT | `/api/projects/:id/stable-port` | 设置/解除固定端口（`{"port": 9100}` / `{"port": null}`） |
 | GET | `/api/projects/:id/logs` | 最近日志 |
 | GET | `/api/projects/:id/logs/stream` | SSE 实时日志 |
 | GET | `/api/runtime` | 运行态列表 |

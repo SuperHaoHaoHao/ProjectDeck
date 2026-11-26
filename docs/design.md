@@ -157,6 +157,37 @@ directory hold the port. This replaces per-project "detect and kill" scripts.
 Monorepo ports are discovered from child packages too (`server/.env`, `apps/web/vite.config.ts`,
 `client/package.json` scripts), because the root `package.json` usually declares nothing.
 
+### Observed ports
+
+Declared ports miss anything hardcoded in source (`const PORT = Number(process.env.PORT || 8365)`
+in `tools/dev.js`). Every API response re-runs the `lsof` listener map and attributes each listener
+to the **deepest** project path containing its working directory:
+
+```text
+:8365  cwd .../pikiboo/plugins/delta-gun-codes  → delta-gun-codes (observed)
+:5175  cwd .../pikiboo/plugins/fret-flow        → fret-flow (observed)
+:5173  cwd .../pikiboo/apps/web                 → pikiboo (declared)
+```
+
+Deepest-path attribution matters: without it the parent monorepo would claim every plugin's port,
+and a plugin would show a green chip for a port owned by its parent. Ports are refreshed per request,
+so start/stop flips the port colour immediately without walking the filesystem again.
+
+### Stable port proxy
+
+frpc and reverse proxies need a port that does not change. A dev server that falls back from 5173 to
+5174 breaks that config every time. A `PortProxy` solves it without touching the project: ProjectDeck
+listens on a fixed port and forwards each incoming connection to the project's *current* port,
+resolved at connect time from the same listener map (declared port first, preferred `target` if set).
+
+```text
+frpc → 127.0.0.1:9100 (stable, owned by ProjectDeck)
+                   └→ resolved per connection → 127.0.0.1:8365 (whatever the project is on now)
+```
+
+Config lives in `stablePorts` (`projectId → { port, target? }`), is persisted in `config.json`, and
+is editable from the project detail page.
+
 ## Security
 
 - Bind `127.0.0.1` by default.

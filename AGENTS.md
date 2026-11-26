@@ -47,6 +47,8 @@ scan a temp copy of `test/fixtures` on a random port.
 9. **Core behavior needs a test.** Scan filtering, start/stop, SSE logs, failure classification, and dependency detection are covered in `test/`. If you change them, extend the tests — do not hand the user a checklist to click through.
 10. **A failed start must never look successful.** `pm.start()` returns `{ ok, runtime, failure }`; `failure.code` is a code (`port-in-use`, `missing-deps`, `missing-script`, `missing-runtime`, `permission`, `unknown`) translated in the UI. An explicit stop must not produce a failure (npm exits with 143).
 11. **Never kill a process you cannot prove belongs to this project.** The pre-start reaper may only kill listeners whose `cwd` is inside the project (compared on real paths), on a port the project declares. Foreign processes must fail the start with `port-in-use` and be reported, never killed.
+12. **Ports are attributed to the deepest matching project path.** A plugin's port belongs to the plugin, not to the monorepo that contains it. `refreshObservedPorts` runs on every API response so start/stop is reflected without a rescan; do not add a second, divergent attribution rule.
+13. **Stable ports are a proxy, not a mutation.** ProjectDeck listens on the stable port and forwards to whatever port the project actually uses, resolved at connect time. Never rewrite a project's config or scripts to force a port.
 
 ## Definition of done
 

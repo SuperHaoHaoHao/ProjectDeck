@@ -21,6 +21,8 @@ ProjectDeck is a local-only web application (Node.js + React) for developers who
 - Dependency preflight: `node_modules` missing while `package.json` declares deps is flagged, with a one-click `npm/pnpm/yarn/bun install` whose output streams to the terminal
 - Live terminal view with ANSI colors, auto-scroll, pause, and clear
 - Port ownership check via `lsof` so a port used by another project does not mark this one running
+- Observed ports: every response re-reads the listener map and attributes each port to the deepest matching project, so ports hardcoded in source (e.g. 8365 in tools/dev.js) show up and plugin ports never get stolen by the monorepo
+- Stable port proxy: bind a fixed port per project; ProjectDeck forwards it to the project's current real port, so frpc / reverse proxy config does not change when the dev server hops ports
 - Sortable list view with creation date and last operation
 - Local HTTP API and hash routes (`#/dashboard`, `#/projects`, `#/project/:id`, `#/settings`)
 - Automated tests: `npm test` (unit + API integration with fixtures, SSE, process-group stop) and `npm run test:e2e` (real browser: start → logs → stop → failure banner → i18n)
@@ -91,6 +93,7 @@ Logs: `~/.projectdeck/logs/<project-id>.log`
 | POST | `/api/projects/:id/stop` | Stop |
 | POST | `/api/projects/:id/restart` | Restart |
 | POST | `/api/projects/:id/install` | Install dependencies (streams into the log) |
+| PUT | `/api/projects/:id/stable-port` | Set or clear a stable port (`{"port": 9100}` / `{"port": null}`) |
 | GET | `/api/projects/:id/logs` | Recent logs |
 | GET | `/api/projects/:id/logs/stream` | SSE log stream |
 | GET | `/api/runtime` | Runtime states |
