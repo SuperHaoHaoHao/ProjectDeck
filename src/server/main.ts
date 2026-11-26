@@ -23,8 +23,8 @@ function decorate(project: Project, pm: ProcessManager): Project {
   let status = project.status;
   if (managed) status = 'running';
   else if (runtime.status === 'error' && runtime.failure) status = 'error';
+  // 端口还被本项目的进程监听着，就是真的在跑，不能因为"上次操作是停止"就报成已停止
   else if (project.status !== 'running' && runtime.failure) status = 'error';
-  else if (project.status === 'running' && runtime.status === 'stopped' && runtime.lastOperation) status = 'stopped';
   return {
     ...project,
     status,

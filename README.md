@@ -28,6 +28,8 @@
 - **后台式布局**：左侧栏 + 仪表盘 + 项目列表 + 项目详情
 - **一键启停**：识别 `npm run dev`、`python3 app.py`、`go run .` 等启动入口
 - **失败会说清楚原因**：从日志里识别「端口被占用 / 缺依赖 / 命令不存在 / 没权限」，直接标红，不再假装启动成功
+- **残留端口自动回收**：启动前如果本项目声明的端口被「工作目录就在本项目里」的旧进程占着，先清掉再启动；别人的进程一律不动
+- **monorepo 端口识别**：`server/.env` 的 `PORT=3000`、`apps/web/vite.config.ts` 的 `port` 都能读出来，不用手填
 - **一键安装依赖**：依赖没装（有 `package.json` 但没有 `node_modules`）会提前标出来，点一下跑 `npm/pnpm/yarn install`，输出同样进终端
 - **实时日志终端**：ANSI 颜色、自动滚动、暂停、清空；停止后仍可回看
 - **项目列表**：状态、端口、创建时间、最后操作、启停按钮
@@ -71,6 +73,7 @@ projectdeck --all    # 连纯文档、组件库也显示
 - 每个项目跑在独立进程组里，停止时整棵进程树一起退出（npm → vite → node）
 - stdout/stderr 会进入环形缓冲、写入 `~/.projectdeck/logs/<id>.log`，并通过 SSE 实时推到页面
 - 「运行中」不是只看端口通不通，而是核对监听进程的 cwd 是否属于该项目
+- 启动前会检查本项目声明的端口：如果占着端口的进程 `cwd` 就在本项目目录里（上次没退干净的自己人），先 `SIGTERM` 再 `SIGKILL` 清掉；不是本项目的进程绝不误杀，只报 `port-in-use` 并打印「端口在谁手里」
 - 启动后会观察 2 秒：进程已经退出、或者日志里出现 `EADDRINUSE` / `Cannot find module` / `command not found`，会判定为启动失败并回传原因
 - 失败原因以 code 形式返回（`port-in-use`、`missing-deps`、`missing-script`、`missing-runtime`、`permission`），由前端翻译成中英文
 - 主动「停止」不会被记成失败（npm 被杀时退出码是 143，不算错误）

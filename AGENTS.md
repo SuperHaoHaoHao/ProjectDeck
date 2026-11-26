@@ -46,6 +46,7 @@ scan a temp copy of `test/fixtures` on a random port.
 8. **Do not add a database** without a design discussion. Current state: JSON files in `~/.projectdeck/`.
 9. **Core behavior needs a test.** Scan filtering, start/stop, SSE logs, failure classification, and dependency detection are covered in `test/`. If you change them, extend the tests — do not hand the user a checklist to click through.
 10. **A failed start must never look successful.** `pm.start()` returns `{ ok, runtime, failure }`; `failure.code` is a code (`port-in-use`, `missing-deps`, `missing-script`, `missing-runtime`, `permission`, `unknown`) translated in the UI. An explicit stop must not produce a failure (npm exits with 143).
+11. **Never kill a process you cannot prove belongs to this project.** The pre-start reaper may only kill listeners whose `cwd` is inside the project (compared on real paths), on a port the project declares. Foreign processes must fail the start with `port-in-use` and be reported, never killed.
 
 ## Definition of done
 

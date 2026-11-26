@@ -1,0 +1,8 @@
+{
+  "name": "fixture-fixed-port",
+  "version": "0.0.1",
+  "description": "Fixture with a declared port, used to test stale-process reaping",
+  "scripts": {
+    "dev": "node server.js --port 4823"
+  }
+}

@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { stateDir } from './config.js';
+import { belongsTo, isPortOpen, listeningPorts, processCwd } from './ports.js';
 import type { Entry, FailureCode, Project, RunFailure } from './types.js';
 
 const MAX_LINES = 3000;
@@ -288,6 +289,61 @@ export class ProcessManager extends EventEmitter {
     return runtime;
   }
 
+  /**
+   * 端口是「被另一个还活着的进程占着」，不是系统不释放。
+   * 如果占着本项目端口的进程，工作目录就在本项目里，那是上次没退干净的自己人，
+   * 直接清掉；不是本项目的进程一律不碰。
+   */
+  private async releaseProjectPorts(project: Project): Promise<void> {
+    const declared = project.ports.map((item) => item.port);
+    if (!declared.length) return;
+
+    const listeners = listeningPorts();
+    if (!listeners.size) return;
+
+    for (const port of declared) {
+      const pid = listeners.get(port);
+      if (!pid || pid === process.pid) continue;
+      const cwd = processCwd(pid);
+      if (!belongsTo(project.path, cwd)) continue;
+
+      this.append(
+        project.id,
+        `\u001b[33m[projectdeck] 端口 :${port} 被本项目残留进程 pid=${pid} 占用，清理后重新启动\u001b[0m\n`,
+      );
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {}
+
+      const softDeadline = Date.now() + 2000;
+      while (Date.now() < softDeadline && (await isPortOpen(port))) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (await isPortOpen(port)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {}
+        const hardDeadline = Date.now() + 1000;
+        while (Date.now() < hardDeadline && (await isPortOpen(port))) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+    }
+  }
+
+  /** 启动失败时把「端口到底在谁手里」写进日志，省得用户自己 lsof */
+  private describePortOwners(project: Project): string {
+    const listeners = listeningPorts();
+    const rows: string[] = [];
+    for (const item of project.ports) {
+      const pid = listeners.get(item.port);
+      if (!pid) continue;
+      const cwd = processCwd(pid);
+      rows.push(`:${item.port} ← pid ${pid}${cwd ? ` (${cwd})` : ''}`);
+    }
+    return rows.join('; ');
+  }
+
   async start(project: Project): Promise<StartResult> {
     if (!project.entry) {
       return {
@@ -298,8 +354,16 @@ export class ProcessManager extends EventEmitter {
     }
     if (this.isRunning(project.id)) return { ok: true, runtime: this.get(project.id) };
 
+    await this.releaseProjectPorts(project);
+
     const { exit } = await this.spawnEntry(project, project.entry, 'run', [project.entry.cmd, ...project.entry.args].join(' '));
     const runtime = await this.settle(project.id, exit, false);
+    if (runtime.failure?.code === 'port-in-use') {
+      const owners = this.describePortOwners(project);
+      if (owners) {
+        this.append(project.id, `\u001b[31m[projectdeck] 端口占用情况: ${owners}\u001b[0m\n`);
+      }
+    }
     return { ok: runtime.status === 'running' && !runtime.failure, runtime, failure: runtime.failure };
   }
 

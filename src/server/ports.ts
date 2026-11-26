@@ -20,6 +20,30 @@ function firstMatch(text: string, regex: RegExp): number | undefined {
   return Number.isInteger(value) && value > 0 && value < 65536 ? value : undefined;
 }
 
+/** monorepo 里真正的端口常写在子包里，例如 server/.env、apps/web/vite.config.ts */
+const CHILD_DIRS = ['server', 'servers', 'client', 'web', 'api', 'backend', 'frontend', 'apps', 'packages'];
+const ENV_FILES = ['.env', '.env.local', '.env.development', '.env.dev'];
+
+function childDirs(dir: string): string[] {
+  const out: string[] = [];
+  for (const group of CHILD_DIRS) {
+    const base = path.join(dir, group);
+    out.push(base);
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(base, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        out.push(path.join(base, entry.name));
+      }
+    }
+  }
+  return out;
+}
+
 export function detectPorts(dir: string, pkg: PackageJson | null, stack: string[]): PortInfo[] {
   const found = new Map<number, PortInfo['source']>();
   const add = (port: number | undefined, source: PortInfo['source']) => {
@@ -27,10 +51,14 @@ export function detectPorts(dir: string, pkg: PackageJson | null, stack: string[
     found.set(port, source);
   };
 
-  for (const file of ['vite.config.ts', 'vite.config.js', 'vite.config.mjs', 'vite.config.cjs']) {
-    const text = readText(path.join(dir, file));
-    if (!text) continue;
-    add(firstMatch(text, /port\s*:\s*(\d{2,5})/), 'config');
+  const dirs = [dir, ...childDirs(dir)];
+
+  for (const base of dirs) {
+    for (const file of ['vite.config.ts', 'vite.config.js', 'vite.config.mjs', 'vite.config.cjs']) {
+      const text = readText(path.join(base, file));
+      if (!text) continue;
+      add(firstMatch(text, /port\s*:\s*(\d{2,5})/), 'config');
+    }
   }
 
   const scripts = Object.values(pkg?.scripts ?? {}).join(' ');
@@ -39,9 +67,11 @@ export function detectPorts(dir: string, pkg: PackageJson | null, stack: string[
     add(firstMatch(scripts, /(?:^|\s)-p\s+(\d{2,5})/), 'script');
   }
 
-  for (const file of ['.env', '.env.local', '.env.development', '.env.dev']) {
-    const text = readText(path.join(dir, file));
-    add(firstMatch(text, /^PORT\s*=\s*(\d{2,5})/m), 'env');
+  for (const base of dirs) {
+    for (const file of ENV_FILES) {
+      const text = readText(path.join(base, file));
+      add(firstMatch(text, /^PORT\s*=\s*(\d{2,5})/m), 'env');
+    }
   }
 
   const clientScript = readText(path.join(dir, 'scripts', 'start-client-dev.js'));
@@ -112,11 +142,23 @@ export function processCwd(pid: number): string {
   return cwd;
 }
 
+/** lsof 报的是真实路径（/private/var/…），项目路径可能带符号链接（/var/…），要统一后再比 */
+function normalizePath(input: string): string {
+  const trimmed = input.replace(/\/+$/, '') || '/';
+  try {
+    return fs.realpathSync(trimmed).replace(/\/+$/, '') || '/';
+  } catch {}
+  // 路径还不存在（或已删除）时，把存在的祖先解析掉再拼回来
+  const parent = path.dirname(trimmed);
+  if (parent === trimmed) return trimmed;
+  return path.join(normalizePath(parent), path.basename(trimmed));
+}
+
 export function belongsTo(projectPath: string, owner: string | undefined): boolean {
   if (!owner) return false;
-  const normalizedProject = projectPath.replace(/\/+$/, '');
-  const normalizedOwner = owner.replace(/\/+$/, '');
-  return normalizedOwner === normalizedProject || normalizedOwner.startsWith(`${normalizedProject}/`);
+  const project = normalizePath(projectPath);
+  const ownerPath = normalizePath(owner);
+  return ownerPath === project || ownerPath.startsWith(`${project}/`);
 }
 
 export function isPortOpen(port: number, host = '127.0.0.1', timeout = 250): Promise<boolean> {

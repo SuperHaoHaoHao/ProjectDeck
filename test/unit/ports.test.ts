@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { after, describe, it } from 'node:test';
 import { belongsTo } from '../../src/server/ports.js';
 
+const tempDirs: string[] = [];
+
 describe('port ownership', () => {
+  after(() => {
+    for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('accepts the project dir itself', () => {
     assert.equal(belongsTo('/a/proj', '/a/proj'), true);
     assert.equal(belongsTo('/a/proj/', '/a/proj'), true);
@@ -20,5 +29,18 @@ describe('port ownership', () => {
   it('rejects an unknown owner', () => {
     assert.equal(belongsTo('/a/proj', undefined), false);
     assert.equal(belongsTo('/a/proj', ''), false);
+  });
+
+  it('matches through symlinks (macOS /var vs /private/var from lsof)', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'projectdeck-link-'));
+    tempDirs.push(base);
+    const real = path.join(base, 'real');
+    fs.mkdirSync(real);
+    const link = path.join(base, 'link');
+    fs.symlinkSync(real, link);
+
+    assert.equal(belongsTo(link, real), true);
+    assert.equal(belongsTo(link, path.join(real, 'client')), true);
+    assert.equal(belongsTo(real, link), true);
   });
 });

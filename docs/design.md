@@ -134,6 +134,29 @@ temp state directory, so tests never start the user's projects or touch `~/.proj
 
 A TCP port being open does **not** mean the project is running. ProjectDeck builds a listener map with `lsof` and resolves each PID's working directory. A project is running only if it owns a listening port, or if its managed process is alive.
 
+A port is never "held by the OS". If `EADDRINUSE` shows up, some live process is listening. The usual
+reasons:
+
+| Cause | Example |
+| --- | --- |
+| Orphan | parent shell/agent dies, child is reparented to launchd (PID 1) and keeps running for days |
+| Wrong kill target | `kill` hits `npm`, but `npm → node cli → npm → npm → vite` keeps the socket open |
+| `SIGKILL` | no cleanup handler, children never receive a signal |
+| Duplicate start | an older stack from another terminal/session is still alive |
+
+Path normalization matters here: `lsof` reports `/private/var/...` while the project may be known as
+`/var/...`, so ownership is compared on real paths (`belongsTo`).
+
+### Reaping stale ports
+
+Before a start, the project's declared ports are checked. If a listener's working directory is inside
+the project, it is a leftover of that same project and gets `SIGTERM` (then `SIGKILL` after 2s). Any
+other process is never touched: the start fails with `port-in-use` and the log records which PID and
+directory hold the port. This replaces per-project "detect and kill" scripts.
+
+Monorepo ports are discovered from child packages too (`server/.env`, `apps/web/vite.config.ts`,
+`client/package.json` scripts), because the root `package.json` usually declares nothing.
+
 ## Security
 
 - Bind `127.0.0.1` by default.

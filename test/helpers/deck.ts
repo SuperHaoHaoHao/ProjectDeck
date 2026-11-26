@@ -43,13 +43,21 @@ export async function waitFor<T>(
  * 起一个隔离的 ProjectDeck：独立的 ~/.projectdeck（PROJECTDECK_HOME）、
  * 独立的 fixture 根目录、随机端口。测试之间不会互相污染。
  */
-export async function startDeck(): Promise<Deck> {
+export async function startDeck(options: { fixedPort?: number } = {}): Promise<Deck> {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'projectdeck-home-'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'projectdeck-root-'));
 
   for (const entry of fs.readdirSync(FIXTURES, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     fs.cpSync(path.join(FIXTURES, entry.name), path.join(root, entry.name), { recursive: true });
+  }
+
+  // fixed-port fixture 用随机端口，避免上一次测试残留的监听影响这一次
+  if (options.fixedPort) {
+    const pkgFile = path.join(root, 'fixed-port', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8')) as { scripts: Record<string, string> };
+    pkg.scripts.dev = `node server.js --port ${options.fixedPort}`;
+    fs.writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
   process.env.PROJECTDECK_HOME = home;

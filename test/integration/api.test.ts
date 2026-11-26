@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { api, startDeck, waitFor, type Deck } from '../helpers/deck.js';
+import { isPortOpen } from '../../src/server/ports.js';
+import { api, freePort, startDeck, waitFor, type Deck } from '../helpers/deck.js';
 
 interface ApiProject {
   id: string;
   name: string;
   status: string;
   entry?: { cmd: string; args: string[] };
+  ports: { port: number; source: string }[];
   dependencies: { manager: string; hasManifest: boolean; installed: boolean };
   failure?: { code: string; line: string };
   managed?: boolean;
@@ -45,6 +49,16 @@ function isAlive(pid: number): boolean {
 describe('ProjectDeck API', () => {
   let deck: Deck;
   let projects: ApiProject[];
+  let fixedPort = 0;
+  const spawned: number[] = [];
+
+  const killSpawned = () => {
+    for (const pid of spawned.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {}
+    }
+  };
 
   const find = (name: string) => projects.find((project) => project.name === name);
   const rescan = async () => {
@@ -54,11 +68,13 @@ describe('ProjectDeck API', () => {
   };
 
   before(async () => {
-    deck = await startDeck();
+    fixedPort = await freePort();
+    deck = await startDeck({ fixedPort });
     await rescan();
   });
 
   after(async () => {
+    killSpawned();
     await deck.close();
   });
 
@@ -159,6 +175,48 @@ describe('ProjectDeck API', () => {
     const afterStop = (await rescan()).projects.find((project) => project.id === service.id);
     assert.equal(afterStop?.status, 'stopped');
     assert.equal(afterStop?.failure, undefined);
+  });
+
+  it('reaps a stale process of the same project holding its port, but never a foreign one', async () => {
+    const fixed = find('fixed-port');
+    assert.ok(fixed);
+    assert.equal(fixed.ports.some((port) => port.port === fixedPort), true);
+
+    // 模拟「上次没退干净」：进程工作目录就在这个项目里
+    const stale = spawn('node', ['server.js', '--port', String(fixedPort)], {
+      cwd: path.join(deck.root, 'fixed-port'),
+      stdio: 'ignore',
+    });
+    if (stale.pid) spawned.push(stale.pid);
+    await waitFor(() => (stale.pid && isAlive(stale.pid) ? true : undefined), { label: 'stale listener' });
+    await waitFor(async () => ((await isPortOpen(fixedPort)) ? true : undefined), { label: 'stale port open' });
+
+    const started = await api<ActionResult>(deck.base, `/api/projects/${fixed.id}/start`, { method: 'POST' });
+    assert.equal(started.ok, true, `start should reclaim the port: ${JSON.stringify(started.failure)}`);
+    await waitFor(() => (stale.pid && !isAlive(stale.pid) ? true : undefined), { label: 'stale process killed' });
+
+    const logs = await api<{ lines: string }>(deck.base, `/api/projects/${fixed.id}/logs`);
+    assert.match(logs.lines, /残留进程/);
+
+    await api<ActionResult>(deck.base, `/api/projects/${fixed.id}/stop`, { method: 'POST' });
+    await waitFor(async () => ((await isPortOpen(fixedPort)) ? undefined : true), { label: 'port released' });
+
+    // 外部进程占着同一个端口：只报错，绝不能误杀
+    const foreign = spawn(
+      'node',
+      ['-e', `require("node:http").createServer((_,r)=>r.end("x")).listen(${fixedPort},"127.0.0.1")`],
+      { cwd: os.tmpdir(), stdio: 'ignore' },
+    );
+    if (foreign.pid) spawned.push(foreign.pid);
+    await waitFor(async () => ((await isPortOpen(fixedPort)) ? true : undefined), { label: 'foreign listener' });
+
+    const blocked = await api<ActionResult>(deck.base, `/api/projects/${fixed.id}/start`, { method: 'POST' });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.failure?.code, 'port-in-use');
+    assert.equal(Boolean(foreign.pid && isAlive(foreign.pid)), true, 'a foreign process must not be killed');
+
+    foreign.kill('SIGKILL');
+    await waitFor(() => (foreign.pid && !isAlive(foreign.pid) ? true : undefined), { label: 'foreign exited' });
   });
 
   it('reports a failure when the start command crashes', async () => {
