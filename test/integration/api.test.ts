@@ -337,13 +337,18 @@ describe('ProjectDeck API', () => {
     assert.ok(project);
     assert.equal(project.ports.length, 0, 'this fixture declares no ports');
 
+    const strayPort = await freePort();
     const stray = spawn(
       'node',
-      ['-e', 'require("node:http").createServer((_,r)=>r.end("x")).listen(0,"127.0.0.1")'],
+      ['-e', `require("node:http").createServer((_,r)=>r.end("x")).listen(${strayPort},"127.0.0.1")`],
       { cwd: path.join(deck.root, 'missing-deps'), stdio: 'ignore' },
     );
     if (stray.pid) spawned.push(stray.pid);
-    await waitFor(() => (stray.pid && isAlive(stray.pid) ? true : undefined), { label: 'stray listener' });
+    // 必须等它真的开始 listen，否则 start 时按 lsof 还看不到它
+    await waitFor(
+      async () => ((stray.pid && isAlive(stray.pid) && (await isPortOpen(strayPort))) ? true : undefined),
+      { label: 'stray listener' },
+    );
 
     const started = await api<ActionResult>(deck.base, `/api/projects/${project.id}/start`, { method: 'POST' });
     assert.equal(started.ok, true, `start should succeed: ${JSON.stringify(started.failure)}`);
