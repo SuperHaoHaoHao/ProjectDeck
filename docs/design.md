@@ -185,8 +185,16 @@ frpc → 127.0.0.1:9100 (stable, owned by ProjectDeck)
                    └→ resolved per connection → 127.0.0.1:8365 (whatever the project is on now)
 ```
 
-Config lives in `stablePorts` (`projectId → { port, target? }`), is persisted in `config.json`, and
-is editable from the project detail page.
+Config lives in `stablePorts` (`projectId → { port, target?, name?, path? }`), is persisted in
+`config.json`, and is editable from the project detail page.
+
+| Concern | Decision |
+| --- | --- |
+| Who picks the port | ProjectDeck auto-allocates from 9100–9199, skipping ports already assigned or listening; a port can also be typed in |
+| Which real port to forward to | `target` when set (needed for multi-port projects: pikiboo web 5173 vs API 3000), otherwise the first owned port |
+| Remembering the mapping | `config.json` keyed by `projectId` (sha1 of the path); `name`/`path` are stored alongside so a moved directory can be re-matched by path on the next scan |
+| Surviving restarts | proxies are re-listened from config on boot; if a project is not running the proxy still listens and refuses connections until the project comes back |
+| IPv4 vs IPv6 | the upstream is dialed on `127.0.0.1`, then `::1`, then `localhost`, because Vite on macOS often binds `[::1]` only |
 
 ## Security
 

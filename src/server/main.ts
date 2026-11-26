@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
-import { loadConfig, saveStablePort } from './config.js';
+import { loadConfig, readStablePorts, saveStablePort, writeStablePorts } from './config.js';
 import { ProcessManager } from './pm.js';
-import { belongsTo, listeningPorts, processCwd } from './ports.js';
+import { belongsTo, isPortOpen, listeningPorts, processCwd } from './ports.js';
 import { PortProxy } from './proxy.js';
 import { refreshObservedPorts, scanProjects } from './scanner.js';
 import type { Project, ScanResult } from './types.js';
@@ -98,6 +98,41 @@ export async function start(argv: string[] = process.argv.slice(2)) {
 
   const proxy = new PortProxy((projectId) => resolveTarget(projectId, config.stablePorts[projectId]?.target));
 
+  /** 固定端口池：9100-9199，跳过已被别的项目占用、或本机正在监听的端口 */
+  const allocateStablePort = async (exceptId: string): Promise<number | undefined> => {
+    const taken = new Set(
+      Object.entries(config.stablePorts)
+        .filter(([projectId]) => projectId !== exceptId)
+        .map(([, value]) => value.port),
+    );
+    for (let port = 9100; port <= 9199; port++) {
+      if (taken.has(port)) continue;
+      if (await isPortOpen(port)) continue;
+      return port;
+    }
+    return undefined;
+  };
+
+  /**
+   * 项目目录搬家后 id 会变（id = sha1(路径)）。配置里冗余存了 path，
+   * 扫描时按 path 认回来，映射不会丢。
+   */
+  const syncStablePorts = (projects: Project[]): void => {
+    const stored = readStablePorts(config.configPath);
+    let changed = false;
+    for (const [projectId, value] of Object.entries(stored)) {
+      if (projects.some((project) => project.id === projectId)) continue;
+      const moved = value.path ? projects.find((project) => project.path === value.path) : undefined;
+      if (!moved || stored[moved.id]) continue;
+      stored[moved.id] = value;
+      delete stored[projectId];
+      changed = true;
+    }
+    if (!changed) return;
+    config.stablePorts = stored;
+    writeStablePorts(config.configPath, stored);
+  };
+
   const withStablePort = (project: Project): Project => {
     const stable = config.stablePorts[project.id];
     if (!stable) return project;
@@ -113,6 +148,7 @@ export async function start(argv: string[] = process.argv.slice(2)) {
 
   const withRuntime = async (force = false): Promise<ScanResult> => {
     const result = await ensureScan(force);
+    syncStablePorts(result.projects);
     // 端口状态每次都现场刷新，启动/停止后不用重新扫描整个目录
     refreshObservedPorts(result.projects);
     return {
@@ -239,22 +275,31 @@ export async function start(argv: string[] = process.argv.slice(2)) {
 
   app.put('/api/projects/:id/stable-port', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = (request.body ?? {}) as { port?: number | null; target?: number | null };
+    const body = (request.body ?? {}) as { port?: number | 'auto' | null; target?: number | null };
     const result = await ensureScan();
-    if (!result.projects.some((item) => item.id === id)) {
-      return reply.code(404).send({ ok: false, error: 'project not found' });
-    }
+    const project = result.projects.find((item) => item.id === id);
+    if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
 
-    if (body.port == null) {
+    if (body.port === null) {
       proxy.close(id);
       delete config.stablePorts[id];
       saveStablePort(config.configPath, id, null);
       return { ok: true };
     }
 
-    const port = Number(body.port);
-    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-      return reply.code(400).send({ ok: false, error: 'invalid port' });
+    let port: number | undefined;
+    if (body.port === 'auto' || body.port === undefined) {
+      port = await allocateStablePort(id);
+      if (!port) return reply.code(409).send({ ok: false, error: 'no free stable port in 9100-9199' });
+    } else {
+      port = Number(body.port);
+      if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+        return reply.code(400).send({ ok: false, error: 'invalid port' });
+      }
+      const taken = Object.entries(config.stablePorts).some(
+        ([projectId, value]) => projectId !== id && value.port === port,
+      );
+      if (taken) return reply.code(409).send({ ok: false, error: 'stable port already assigned' });
     }
 
     try {
@@ -264,7 +309,12 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     }
 
     const target = body.target == null ? undefined : Number(body.target);
-    config.stablePorts[id] = { port, ...(target ? { target } : {}) };
+    config.stablePorts[id] = {
+      port,
+      ...(target ? { target } : {}),
+      name: project.name,
+      path: project.path,
+    };
     saveStablePort(config.configPath, id, config.stablePorts[id]);
     return {
       ok: true,

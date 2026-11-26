@@ -20,6 +20,7 @@ import { ProjectList } from './components/ProjectList';
 import { ScanModal } from './components/ScanModal';
 import { SettingsView } from './components/SettingsView';
 import { Sidebar, type NavKey } from './components/Sidebar';
+import type { StablePortChange } from './components/StablePortCard';
 import { Button } from './components/ui/button';
 import { useI18n, type MessageKey } from './lib/i18n';
 import { cn } from './lib/utils';
@@ -171,9 +172,9 @@ export default function App() {
     }
   };
 
-  const changeStablePort = async (project: Project, port: number | null) => {
+  const changeStablePort = async (project: Project, change: StablePortChange) => {
     try {
-      await apiSetStablePort(project.id, port);
+      await apiSetStablePort(project.id, change.port, change.target);
       showToast(t('stable.saved'), 'ok');
       await refresh();
     } catch (err) {

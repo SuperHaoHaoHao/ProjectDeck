@@ -1,0 +1,8 @@
+{
+  "name": "fixture-ipv6-service",
+  "version": "0.0.1",
+  "description": "Fixture that listens on IPv6 loopback only, like Vite on macOS",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

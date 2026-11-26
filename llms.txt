@@ -22,7 +22,7 @@ ProjectDeck is a local-only web application (Node.js + React) for developers who
 - Live terminal view with ANSI colors, auto-scroll, pause, and clear
 - Port ownership check via `lsof` so a port used by another project does not mark this one running
 - Observed ports: every response re-reads the listener map and attributes each port to the deepest matching project, so ports hardcoded in source (e.g. 8365 in tools/dev.js) show up and plugin ports never get stolen by the monorepo
-- Stable port proxy: bind a fixed port per project; ProjectDeck forwards it to the project's current real port, so frpc / reverse proxy config does not change when the dev server hops ports
+- Stable port proxy: auto-assign (9100–9199) or type a fixed port per project; ProjectDeck forwards it to the project's current real port, so frpc / reverse proxy config does not change when the dev server hops ports. Multi-port projects can pin the target (e.g. web 5173 instead of API 3000). Mappings persist in `config.json` under `stablePorts`, keyed by project id with name/path for re-matching
 - Sortable list view with creation date and last operation
 - Local HTTP API and hash routes (`#/dashboard`, `#/projects`, `#/project/:id`, `#/settings`)
 - Automated tests: `npm test` (unit + API integration with fixtures, SSE, process-group stop) and `npm run test:e2e` (real browser: start → logs → stop → failure banner → i18n)

@@ -1,5 +1,36 @@
 import net from 'node:net';
 
+function connectHost(port: number, host: string, timeout = 1200): Promise<net.Socket> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ port, host });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timeout connecting to ${host}:${port}`));
+    }, timeout);
+    timer.unref?.();
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      socket.off('error', reject);
+      resolve(socket);
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      socket.destroy();
+      reject(error);
+    });
+  });
+}
+
+/** 依次尝试 IPv4 / IPv6，谁先连上就用谁 */
+async function connectAny(port: number): Promise<net.Socket | undefined> {
+  for (const host of ['127.0.0.1', '::1', 'localhost']) {
+    try {
+      return await connectHost(port, host);
+    } catch {}
+  }
+  return undefined;
+}
+
 /**
  * 稳定端口：ProjectDeck 自己监听一个固定端口，把连接转发到项目「当前真正在监听的端口」。
  *
@@ -17,13 +48,22 @@ export class PortProxy {
       throw new Error('invalid stable port');
     }
 
-    const server = net.createServer((socket) => {
+    const server = net.createServer(async (socket) => {
       const target = this.resolveTarget(projectId);
       if (!target || target === port) {
         socket.destroy();
         return;
       }
-      const upstream = net.connect({ port: target, host: '127.0.0.1' });
+
+      // Vite 在 macOS 上常用 localhost，只监听 ::1；必须 IPv4/IPv6 都试
+      socket.pause();
+      const upstream = await connectAny(target);
+      if (!upstream || socket.destroyed) {
+        upstream?.destroy();
+        socket.destroy();
+        return;
+      }
+
       const teardown = () => {
         socket.destroy();
         upstream.destroy();
@@ -33,6 +73,7 @@ export class PortProxy {
       socket.on('close', teardown);
       upstream.pipe(socket);
       socket.pipe(upstream);
+      socket.resume();
     });
 
     server.on('error', () => {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -260,6 +261,75 @@ describe('ProjectDeck API', () => {
       body: JSON.stringify({ port: null }),
     });
     assert.equal(cleared.status, 200);
+  });
+
+  it('forwards a stable port to a project listening on IPv6 loopback only', async (t) => {
+    const ipv6Available = await new Promise<boolean>((resolve) => {
+      const probe = net.createServer();
+      probe.once('error', () => resolve(false));
+      probe.listen(0, '::1', () => probe.close(() => resolve(true)));
+    });
+    if (!ipv6Available) return t.skip('IPv6 loopback not available');
+
+    const project = find('ipv6-service');
+    assert.ok(project);
+    const stable = await freePort();
+
+    const saved = await fetch(`${deck.base}/api/projects/${project.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: stable }),
+    });
+    assert.equal(saved.status, 200);
+
+    const started = await api<ActionResult>(deck.base, `/api/projects/${project.id}/start`, { method: 'POST' });
+    assert.equal(started.ok, true);
+
+    const body = await waitFor(
+      async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${stable}/`, { signal: AbortSignal.timeout(1000) });
+          return response.ok ? await response.text() : undefined;
+        } catch {
+          return undefined;
+        }
+      },
+      { label: 'ipv6 forwarding', timeout: 20_000 },
+    );
+    assert.equal(body, 'ipv6-ok');
+
+    await api<ActionResult>(deck.base, `/api/projects/${project.id}/stop`, { method: 'POST' });
+    await fetch(`${deck.base}/api/projects/${project.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: null }),
+    });
+  });
+
+  it('auto-assigns a stable port and remembers it in config.json', async () => {
+    const service = find('service');
+    assert.ok(service);
+
+    const response = await fetch(`${deck.base}/api/projects/${service.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: 'auto' }),
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { stablePort: { port: number } };
+    assert.ok(body.stablePort.port >= 9100 && body.stablePort.port <= 9199);
+
+    const raw = JSON.parse(fs.readFileSync(path.join(deck.home, 'config.json'), 'utf8')) as {
+      stablePorts: Record<string, { port: number; name?: string }>;
+    };
+    assert.equal(raw.stablePorts[service.id]?.port, body.stablePort.port);
+    assert.equal(raw.stablePorts[service.id]?.name, 'service', 'config stays human-readable');
+
+    await fetch(`${deck.base}/api/projects/${service.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: null }),
+    });
   });
 
   it('reports a failure when the start command crashes', async () => {

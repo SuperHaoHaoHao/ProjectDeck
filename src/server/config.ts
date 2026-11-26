@@ -7,6 +7,9 @@ export interface StablePortConfig {
   port: number;
   /** 希望转发到的项目端口；不填就自动用项目当前实际监听的端口 */
   target?: number;
+  /** 冗余存一份，方便人和 agent 直接读 config.json */
+  name?: string;
+  path?: string;
 }
 
 export interface DeckConfig {
@@ -28,16 +31,29 @@ export function saveStablePort(
   projectId: string,
   value: StablePortConfig | null,
 ): void {
+  const current = readStablePorts(configPath);
+  if (value) current[projectId] = value;
+  else delete current[projectId];
+  writeStablePorts(configPath, current);
+}
+
+export function readStablePorts(configPath: string): Record<string, StablePortConfig> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      stablePorts?: Record<string, StablePortConfig>;
+    };
+    return raw.stablePorts ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeStablePorts(configPath: string, value: Record<string, StablePortConfig>): void {
   let raw: Record<string, unknown> = {};
   try {
     raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
   } catch {}
-
-  const current = (raw.stablePorts as Record<string, StablePortConfig> | undefined) ?? {};
-  if (value) current[projectId] = value;
-  else delete current[projectId];
-  raw.stablePorts = current;
-
+  raw.stablePorts = value;
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
 }

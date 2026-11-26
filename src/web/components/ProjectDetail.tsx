@@ -6,7 +6,7 @@ import { fetchProject, type Project } from '@/api';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { StablePortCard } from './StablePortCard';
+import { StablePortCard, type StablePortChange } from './StablePortCard';
 import { Terminal } from './Terminal';
 import { KIND_ICON, kindLabel } from './ProjectCard';
 import { StatusBadge } from './StatusBadge';
@@ -50,7 +50,7 @@ export function ProjectDetail({
   busy: boolean;
   onBack: () => void;
   onAction: (project: Project, action: 'start' | 'stop' | 'restart' | 'install') => void;
-  onStablePort: (project: Project, port: number | null) => Promise<void>;
+  onStablePort: (project: Project, change: StablePortChange) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<'overview' | 'terminal'>(

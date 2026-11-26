@@ -146,12 +146,13 @@ export function installProject(id: string): Promise<ActionResult> {
 
 export function setStablePort(
   id: string,
-  port: number | null,
+  port: number | 'auto' | null,
+  target?: number | null,
 ): Promise<{ ok: boolean; stablePort?: { port: number; target?: number; listening: boolean } }> {
   return json(`/api/projects/${id}/stable-port`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ port }),
+    body: JSON.stringify({ port, ...(target === undefined ? {} : { target }) }),
   });
 }
 

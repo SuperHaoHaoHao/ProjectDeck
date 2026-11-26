@@ -49,6 +49,8 @@ scan a temp copy of `test/fixtures` on a random port.
 11. **Never kill a process you cannot prove belongs to this project.** The pre-start reaper may only kill listeners whose `cwd` is inside the project (compared on real paths), on a port the project declares. Foreign processes must fail the start with `port-in-use` and be reported, never killed.
 12. **Ports are attributed to the deepest matching project path.** A plugin's port belongs to the plugin, not to the monorepo that contains it. `refreshObservedPorts` runs on every API response so start/stop is reflected without a rescan; do not add a second, divergent attribution rule.
 13. **Stable ports are a proxy, not a mutation.** ProjectDeck listens on the stable port and forwards to whatever port the project actually uses, resolved at connect time. Never rewrite a project's config or scripts to force a port.
+14. **Upstream connections must try both address families.** Vite on macOS often binds `[::1]` only; connecting to `127.0.0.1` alone yields an empty reply. `proxy.ts` dials `127.0.0.1` → `::1` → `localhost`, and there is a fixture test for it.
+15. **Stable-port persistence is `config.json` keyed by project id** with `name`/`path` stored for readability and re-matching. Auto-allocation uses 9100–9199 and must skip ports assigned to other projects or already listening.
 
 ## Definition of done
 

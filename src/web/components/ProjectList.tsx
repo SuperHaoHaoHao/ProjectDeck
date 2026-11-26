@@ -116,6 +116,15 @@ export function ProjectList({
                   <StatusBadge status={project.status} failing={Boolean(project.failure)} />
                 </td>
                 <td className="px-3 py-2.5">
+                  {project.stablePort ? (
+                    <span
+                      title={t('stable.title')}
+                      data-testid="stable-port-chip"
+                      className="mb-1 inline-flex items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] text-violet-300"
+                    >
+                      →:{project.stablePort.port}
+                    </span>
+                  ) : null}
                   {project.ports.length ? (
                     <div className="flex flex-wrap gap-1">
                       {project.ports.map((port) => (
