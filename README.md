@@ -10,6 +10,8 @@
 
 **有哪些、是什么、在哪、怎么启动、现在是否在跑、日志在说什么。**
 
+一句话亮点：**给每个项目一个永远不变的本地入口。** 项目真实端口在 5173/5174 之间怎么跳，`http://127.0.0.1:9100` 和 frpc 隧道都不用改。
+
 ## 解决什么问题
 
 | 问题 | ProjectDeck 的做法 |
@@ -20,7 +22,7 @@
 | 不知道报没报错 | 实时日志终端（SSE + ANSI 颜色） |
 | 端口通了就以为项目在跑 | 核对监听进程的 cwd，别的项目占着端口不会被误判 |
 
-## 功能（v0.0.2）
+## 功能（v0.1.0）
 
 - **零配置扫描**：默认扫 `~/Code`，可配置根目录、深度、忽略列表
 - **只收录能跑的项目**：纯文档、没有启动入口的包会被过滤，并在扫描报告里给出原因
@@ -142,9 +144,10 @@ MCP server（stdio + HTTP）在 v0.1 路线里：让 Claude Code / Kimi / Codex 
 
 | 版本 | 内容 |
 | --- | --- |
-| v0.1 | MCP server、GitHub 克隆接入、手动接入、pm2 驱动 |
-| v0.2 | FRP 只读面板、Docker 驱动、launchd 只读 |
-| v0.3 | 「收养」外部进程、历史指标、项目笔记与标签 |
+| v0.1（已发布） | 扫描、目录、启停、实时日志、端口回收、固定端口映射、中英双语 |
+| v0.2 | MCP server、GitHub 克隆接入、手动接入、pm2 驱动 |
+| v0.3 | FRP 只读面板、Docker 驱动、launchd 只读 |
+| v0.4 | 「收养」外部进程、历史指标、项目笔记与标签 |
 | v1.0 | 配方市场、Tauri 桌面端、多机管理 |
 
 ## 设计与贡献
@@ -162,6 +165,8 @@ MIT
 ## English
 
 ProjectDeck is a local-first project catalog and control deck for developers who accumulate dozens of AI-generated repositories. It auto-discovers runnable projects under your dev folders, detects their stack, renders READMEs, tracks ports and git state, and lets you start/stop them with live streaming logs — all in one local web UI. No database, no cloud, macOS-first.
+
+The one-line highlight: **every project gets a local entry point that never changes.** The real port can hop between 5173 and 5174; `http://127.0.0.1:9100` and your frpc tunnel stay put.
 
 Quick start: `npm install && npm run build && npm start`, then open http://127.0.0.1:4321.
 

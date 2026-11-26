@@ -207,7 +207,8 @@ Config lives in `stablePorts` (`projectId → { port, target?, name?, path? }`),
 
 | Version | Scope |
 | --- | --- |
-| v0.1 | MCP server (stdio + HTTP), GitHub clone import, manual add, pm2 driver |
-| v0.2 | FRP read-only panel, Docker driver, launchd observe |
-| v0.3 | Adopt external processes, metrics history, notes/tags |
+| v0.1 (released) | catalog, start/stop, live logs, stale-port reaping, stable-port proxying, zh/en |
+| v0.2 | MCP server (stdio + HTTP), GitHub clone import, manual add, pm2 driver |
+| v0.3 | FRP read-only panel, Docker driver, launchd observe |
+| v0.4 | Adopt external processes, metrics history, notes/tags |
 | v1.0 | Recipe marketplace, Tauri desktop shell, multi-machine |

@@ -10,7 +10,7 @@ ProjectDeck is a local-only web application (Node.js + React) for developers who
 - **Understanding**: detects tech stack, reads README, shows path, version, git branch, last commit, build artifacts, and creation date.
 - **Control**: starts and stops projects from the browser, with real-time streaming logs (SSE + ANSI colors) and accurate running state based on port ownership, not just open ports.
 
-## Core features (v0.0.2)
+## Core features (v0.1.0)
 
 - Zero-config scan of `~/Code` (configurable roots, depth, ignore list)
 - Only runnable projects are indexed; docs-only and pure packages are filtered with reasons
@@ -101,7 +101,9 @@ Logs: `~/.projectdeck/logs/<project-id>.log`
 
 ## Status
 
-Early alpha. Implemented: scan, catalog, dashboard, list, detail, start/stop/restart, live logs, scan report.
+v0.1.0 (released). Implemented: scan with live progress, catalog, dashboard, list, detail, start/stop/restart,
+live logs over SSE, startup failure classification, dependency install, stale-port reaping, stable-port proxying,
+zh/en UI.
 Planned: MCP server (stdio + HTTP), GitHub import, FRP read-only panel, pm2/Docker drivers, Tauri desktop shell.
 
 ## Keywords

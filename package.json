@@ -1,6 +1,6 @@
 {
   "name": "projectdeck",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Local project catalog and control deck for your AI-built projects",
   "type": "module",
   "license": "MIT",
