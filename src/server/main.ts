@@ -31,6 +31,7 @@ function decorate(project: Project, pm: ProcessManager): Project {
     lastOperation: runtime.lastOperation,
     startedAt: runtime.startedAt,
     failure: runtime.failure,
+    managed,
   };
 }
 

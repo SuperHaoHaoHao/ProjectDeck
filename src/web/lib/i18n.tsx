@@ -63,6 +63,7 @@ const zh = {
 
   'card.noDescription': '暂无描述',
   'card.noStart': '无需启动',
+  'card.noPort': '端口未探明',
   'card.start': '启动',
   'card.stop': '停止',
 
@@ -128,6 +129,8 @@ const zh = {
   'term.loading': 'loading…',
   'term.waiting': '等待日志输出…',
   'term.notRunning': '项目未运行。点击上方「启动」后，这里会实时显示 npm run dev 这类命令的输出。',
+  'term.adopted':
+    '这个项目是在 ProjectDeck 之外启动的（比如你在终端里自己跑的），读不到它的 stdout。点上方的「重启」交给 ProjectDeck 托管后，这里就会实时显示日志。',
 
   'scan.title': '扫描报告',
   'scan.subtitle': '看清扫了哪些目录、用了什么规则、哪些被过滤了',
@@ -235,6 +238,7 @@ const en: Record<keyof typeof zh, string> = {
 
   'card.noDescription': 'No description',
   'card.noStart': 'No start needed',
+  'card.noPort': 'Port unknown',
   'card.start': 'Start',
   'card.stop': 'Stop',
 
@@ -300,6 +304,8 @@ const en: Record<keyof typeof zh, string> = {
   'term.loading': 'loading…',
   'term.waiting': 'Waiting for output…',
   'term.notRunning': 'Project is not running. Start it and the output of commands like npm run dev will stream here.',
+  'term.adopted':
+    'This project was started outside ProjectDeck, so its stdout is not captured. Restart it from the button above and its logs will stream here live.',
 
   'scan.title': 'Scan report',
   'scan.subtitle': 'What was scanned, which rules applied, and what was filtered',

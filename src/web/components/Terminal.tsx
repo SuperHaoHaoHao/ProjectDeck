@@ -8,7 +8,15 @@ import { cn } from '@/lib/utils';
 const converter = new Convert({ fg: '#d4d4d4', bg: '#0a0a0a', newline: true, escapeXML: true });
 const MAX_CHARS = 400_000;
 
-export function Terminal({ projectId, running }: { projectId: string; running: boolean }) {
+export function Terminal({
+  projectId,
+  running,
+  managed,
+}: {
+  projectId: string;
+  running: boolean;
+  managed?: boolean;
+}) {
   const { t } = useI18n();
   const [text, setText] = useState('');
   const [connected, setConnected] = useState(false);
@@ -116,7 +124,13 @@ export function Terminal({ projectId, running }: { projectId: string; running: b
           />
         ) : (
           <div className="font-mono text-[12px] leading-5 text-zinc-600">
-            <span>{running ? t('term.waiting') : t('term.notRunning')}</span>
+            {running && !managed ? (
+              <span data-testid="adopted-hint" className="text-amber-400/80">
+                {t('term.adopted')}
+              </span>
+            ) : (
+              <span>{running ? t('term.waiting') : t('term.notRunning')}</span>
+            )}
           </div>
         )}
       </div>

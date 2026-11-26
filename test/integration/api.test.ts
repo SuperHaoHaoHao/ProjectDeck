@@ -11,6 +11,7 @@ interface ApiProject {
   entry?: { cmd: string; args: string[] };
   dependencies: { manager: string; hasManifest: boolean; installed: boolean };
   failure?: { code: string; line: string };
+  managed?: boolean;
 }
 
 interface ScanPayload {
@@ -146,6 +147,7 @@ describe('ProjectDeck API', () => {
 
     const running = (await rescan()).projects.find((project) => project.id === service.id);
     assert.equal(running?.status, 'running');
+    assert.equal(running?.managed, true, 'a started project must be reported as managed so the terminal works');
 
     const stopped = await api<ActionResult>(deck.base, `/api/projects/${service.id}/stop`, { method: 'POST' });
     assert.equal(stopped.runtime.status, 'stopped');

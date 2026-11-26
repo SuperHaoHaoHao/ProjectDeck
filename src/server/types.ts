@@ -86,6 +86,8 @@ export interface Project {
   startedAt?: string;
   /** 最近一次启动失败的归类，来自运行态 */
   failure?: RunFailure;
+  /** 是否由 ProjectDeck 启动（外部启动的进程读不到 stdout） */
+  managed?: boolean;
   lastSeenAt: string;
 }
 

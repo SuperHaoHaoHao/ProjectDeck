@@ -122,7 +122,9 @@ export function ProjectCard({
               </span>
             ))
           ) : (
-            <span className="text-[11px] text-zinc-600">{t('card.noStart')}</span>
+            <span className="text-[11px] text-zinc-600">
+              {project.entry ? t('card.noPort') : t('card.noStart')}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2 text-[11px] text-zinc-600">

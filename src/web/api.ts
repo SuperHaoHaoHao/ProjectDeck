@@ -57,6 +57,8 @@ export interface Project {
   lastOperation?: string;
   startedAt?: string;
   failure?: RunFailure;
+  /** true = 由 ProjectDeck 启动，可以看实时日志 */
+  managed?: boolean;
   lastSeenAt: string;
 }
 

@@ -194,7 +194,7 @@ export function ProjectDetail({
 
       {tab === 'terminal' ? (
         <div className="mt-4 min-h-0 flex-1">
-          <Terminal projectId={project.id} running={running} />
+          <Terminal projectId={project.id} running={running} managed={project.managed} />
         </div>
       ) : (
         <div className="mt-4 grid min-h-0 flex-1 gap-5 overflow-y-auto lg:grid-cols-[340px_1fr]">
