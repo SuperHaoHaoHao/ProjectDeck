@@ -4,7 +4,7 @@ import path from 'node:path';
 import { isIgnoredName, type DeckConfig } from './config.js';
 import { detect, detectDependencies, readJson, type Detection, type PackageJson } from './detect.js';
 import { readGit } from './git.js';
-import { belongsTo, detectPorts, listeningPorts, probePorts, processCwd } from './ports.js';
+import { belongsTo, detectPorts, listeningPorts, normalizePath, probePorts, processCwd } from './ports.js';
 import type { Artifact, Project, ProjectKind, Runtime, ScanResult, SkipReason, SkippedItem } from './types.js';
 
 const README_NAMES = ['README.md', 'readme.md', 'README_EN.md', 'README.zh-CN.md', 'README.zh.md', 'README.txt'];
@@ -171,6 +171,58 @@ function docsProject(dir: string): Project {
   };
 }
 
+/**
+ * 用 lsof 现场刷新「谁在监听哪个端口」，不重新遍历目录。
+ * 这样启动/停止后端口立刻变绿变灰，写死在代码里的端口（如 8365）也能显示出来。
+ */
+export function refreshObservedPorts(projects: Project[]): void {
+  const listeners = listeningPorts();
+  if (!listeners.size) return;
+
+  const ranked = [...projects].sort((a, b) => normalizePath(b.path).length - normalizePath(a.path).length);
+  const attributed = new Map<number, { owner: string; project: Project }>();
+  const unknownOwner = new Set<number>();
+
+  for (const [port, pid] of listeners) {
+    const owner = processCwd(pid);
+    if (!owner) {
+      unknownOwner.add(port);
+      continue;
+    }
+    const target = ranked.find((project) => belongsTo(project.path, owner));
+    if (target) attributed.set(port, { owner, project: target });
+  }
+
+  for (const project of projects) {
+    project.ports = project.ports.filter((port) => port.source !== 'observed');
+    for (const port of project.ports) {
+      const hit = attributed.get(port.port);
+      if (hit) {
+        port.owner = hit.owner;
+        port.open = hit.project.id === project.id;
+      } else if (unknownOwner.has(port.port)) {
+        port.open = true;
+      } else {
+        port.open = false;
+        port.owner = undefined;
+      }
+    }
+  }
+
+  for (const [port, hit] of attributed) {
+    if (hit.project.ports.some((item) => item.port === port)) continue;
+    if (hit.project.ports.length >= 8) continue;
+    hit.project.ports.push({ port, source: 'observed', open: true, owner: hit.owner });
+  }
+
+  for (const project of projects) {
+    project.ports.sort((a, b) => a.port - b.port);
+    if (project.ports.some((port) => port.open)) project.status = 'running';
+    else if (project.ports.length || project.entry) project.status = 'stopped';
+    else project.status = 'n/a';
+  }
+}
+
 export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
   const started = Date.now();
   const projects: Project[] = [];
@@ -258,16 +310,48 @@ export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
     }
   }
 
-  // 端口通不算数，得是这个项目的进程在监听才算 running
+  // 端口通不算数，得是这个项目的进程在监听才算 running。
+  // 一个端口只归属给「路径最具体」的项目：pikiboo/plugins/fret-flow 优先于 pikiboo。
   const listeners = listeningPorts();
   if (listeners.size) {
+    const ranked = [...unique].sort((a, b) => normalizePath(b.path).length - normalizePath(a.path).length);
+    const attributed = new Map<number, { owner: string; project: Project }>();
+    const unknownOwner = new Set<number>();
+
+    for (const [port, pid] of listeners) {
+      const owner = processCwd(pid);
+      if (!owner) {
+        unknownOwner.add(port);
+        continue;
+      }
+      const target = ranked.find((project) => belongsTo(project.path, owner));
+      if (target) attributed.set(port, { owner, project: target });
+    }
+
     for (const project of unique) {
       for (const port of project.ports) {
-        const pid = listeners.get(port.port);
-        if (!pid) continue;
-        port.open = true;
-        port.owner = processCwd(pid);
+        const hit = attributed.get(port.port);
+        if (hit) {
+          port.owner = hit.owner;
+          port.open = hit.project.id === project.id;
+        } else if (unknownOwner.has(port.port)) {
+          // 拿不到监听进程的 cwd（权限等），保守起见当作它在跑
+          port.open = true;
+        } else {
+          port.open = false;
+          port.owner = undefined;
+        }
       }
+    }
+
+    // 配置里没写、但运行时确实在监听的端口（比如写死在 tools/dev.js 里的 8365）
+    for (const [port, hit] of attributed) {
+      if (hit.project.ports.some((item) => item.port === port)) continue;
+      if (hit.project.ports.length >= 8) continue;
+      hit.project.ports.push({ port, source: 'observed', open: true, owner: hit.owner });
+    }
+    for (const project of unique) {
+      project.ports.sort((a, b) => a.port - b.port);
     }
   } else {
     await Promise.all(unique.map(async (project) => probePorts(project.ports)));
@@ -279,9 +363,7 @@ export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
       project.status = project.entry ? 'stopped' : 'n/a';
       continue;
     }
-    const owned = project.ports.some((port) => port.open && belongsTo(project.path, port.owner));
-    const unknownOwner = project.ports.some((port) => port.open && !port.owner);
-    project.status = owned || unknownOwner ? 'running' : 'stopped';
+    project.status = project.ports.some((port) => port.open) ? 'running' : 'stopped';
   }
 
   unique.sort((a, b) => {

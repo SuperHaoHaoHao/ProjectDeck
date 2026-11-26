@@ -6,6 +6,7 @@ import { fetchProject, type Project } from '@/api';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { StablePortCard } from './StablePortCard';
 import { Terminal } from './Terminal';
 import { KIND_ICON, kindLabel } from './ProjectCard';
 import { StatusBadge } from './StatusBadge';
@@ -43,11 +44,13 @@ export function ProjectDetail({
   busy,
   onBack,
   onAction,
+  onStablePort,
 }: {
   project: Project;
   busy: boolean;
   onBack: () => void;
   onAction: (project: Project, action: 'start' | 'stop' | 'restart' | 'install') => void;
+  onStablePort: (project: Project, port: number | null) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<'overview' | 'terminal'>(
@@ -254,6 +257,8 @@ export function ProjectDetail({
               <Row label={t('detail.createdAt')}>{formatDate(project.createdAt)}</Row>
               <Row label={t('detail.lastOperation')}>{formatDateTime(project.lastOperation)}</Row>
             </section>
+
+            <StablePortCard project={project} busy={busy} onChange={onStablePort} />
 
             <section className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-3">
               <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">

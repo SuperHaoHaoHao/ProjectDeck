@@ -8,10 +8,19 @@ export type Supervisor = 'pm2' | 'docker' | 'external' | 'none';
 
 export interface PortInfo {
   port: number;
-  source: 'config' | 'env' | 'script' | 'default';
+  /** observed = 运行时从 lsof 里看到的、真正被这个项目监听的端口 */
+  source: 'config' | 'env' | 'script' | 'default' | 'observed';
   open: boolean;
   /** 监听该端口的进程工作目录，用于判断端口到底属于哪个项目 */
   owner?: string;
+}
+
+export interface StablePortInfo {
+  /** ProjectDeck 自己监听的端口 */
+  port: number;
+  /** 当前转发到的项目端口（自动解析） */
+  target?: number;
+  listening: boolean;
 }
 
 export interface GitInfo {
@@ -88,6 +97,8 @@ export interface Project {
   failure?: RunFailure;
   /** 是否由 ProjectDeck 启动（外部启动的进程读不到 stdout） */
   managed?: boolean;
+  /** 固定端口：frpc / 反向代理指向它即可，项目真实端口变化不影响 */
+  stablePort?: StablePortInfo;
   lastSeenAt: string;
 }
 

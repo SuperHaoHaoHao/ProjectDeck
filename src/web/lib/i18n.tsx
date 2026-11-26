@@ -122,6 +122,18 @@ const zh = {
   'detail.viewLogs': '查看日志',
   'list.needsInstall': '依赖未安装',
 
+  'stable.title': '固定端口',
+  'stable.hint':
+    '绑定一个不会变的端口，frpc / 反向代理指向它。项目真实端口在 5173、5174 之间怎么跳都不用改配置。',
+  'stable.placeholder': '例如 9100',
+  'stable.bind': '绑定',
+  'stable.clear': '解除',
+  'stable.target': '现在转发到 :{port}',
+  'stable.waiting': '等待项目启动，启动后自动生效',
+  'stable.saved': '固定端口已更新',
+  'stable.failed': '固定端口设置失败：{error}',
+  'stable.invalid': '端口需要在 1024–65535 之间',
+
   'term.autoScroll': '自动滚动',
   'term.clear': '清空',
   'term.streaming': 'streaming',
@@ -296,6 +308,18 @@ const en: Record<keyof typeof zh, string> = {
   'detail.failure': 'Start failed',
   'detail.viewLogs': 'View logs',
   'list.needsInstall': 'deps missing',
+
+  'stable.title': 'Stable port',
+  'stable.hint':
+    'Bind a port that never changes and point frpc or your reverse proxy at it. The real port can hop between 5173 and 5174 without touching config.',
+  'stable.placeholder': 'e.g. 9100',
+  'stable.bind': 'Bind',
+  'stable.clear': 'Remove',
+  'stable.target': 'Forwarding to :{port}',
+  'stable.waiting': 'Waiting for the project to start; applies automatically',
+  'stable.saved': 'Stable port updated',
+  'stable.failed': 'Could not set the stable port: {error}',
+  'stable.invalid': 'Port must be between 1024 and 65535',
 
   'term.autoScroll': 'Auto-scroll',
   'term.clear': 'Clear',

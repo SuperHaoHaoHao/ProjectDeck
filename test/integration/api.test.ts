@@ -16,6 +16,7 @@ interface ApiProject {
   dependencies: { manager: string; hasManifest: boolean; installed: boolean };
   failure?: { code: string; line: string };
   managed?: boolean;
+  stablePort?: { port: number; target?: number; listening: boolean };
 }
 
 interface ScanPayload {
@@ -217,6 +218,48 @@ describe('ProjectDeck API', () => {
 
     foreign.kill('SIGKILL');
     await waitFor(() => (foreign.pid && !isAlive(foreign.pid) ? true : undefined), { label: 'foreign exited' });
+  });
+
+  it('exposes a stable port that follows the real port the project ends up on', async () => {
+    const service = find('service');
+    assert.ok(service);
+    const stable = await freePort();
+
+    const saved = await fetch(`${deck.base}/api/projects/${service.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: stable }),
+    });
+    assert.equal(saved.status, 200);
+
+    const started = await api<ActionResult>(deck.base, `/api/projects/${service.id}/start`, { method: 'POST' });
+    assert.equal(started.ok, true);
+
+    const body = await waitFor(
+      async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${stable}/`, { signal: AbortSignal.timeout(1000) });
+          return response.ok ? await response.text() : undefined;
+        } catch {
+          return undefined;
+        }
+      },
+      { label: 'stable port forwarding', timeout: 20_000 },
+    );
+    assert.equal(body, 'ok');
+
+    const payload = await rescan();
+    const updated = payload.projects.find((project) => project.id === service.id);
+    assert.equal(updated?.stablePort?.port, stable);
+    assert.ok(updated?.stablePort?.target && updated.stablePort.target !== stable);
+
+    await api<ActionResult>(deck.base, `/api/projects/${service.id}/stop`, { method: 'POST' });
+    const cleared = await fetch(`${deck.base}/api/projects/${service.id}/stable-port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: null }),
+    });
+    assert.equal(cleared.status, 200);
   });
 
   it('reports a failure when the start command crashes', async () => {

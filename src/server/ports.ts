@@ -143,7 +143,7 @@ export function processCwd(pid: number): string {
 }
 
 /** lsof 报的是真实路径（/private/var/…），项目路径可能带符号链接（/var/…），要统一后再比 */
-function normalizePath(input: string): string {
+export function normalizePath(input: string): string {
   const trimmed = input.replace(/\/+$/, '') || '/';
   try {
     return fs.realpathSync(trimmed).replace(/\/+$/, '') || '/';

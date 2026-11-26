@@ -4,9 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
-import { loadConfig } from './config.js';
+import { loadConfig, saveStablePort } from './config.js';
 import { ProcessManager } from './pm.js';
-import { scanProjects } from './scanner.js';
+import { belongsTo, listeningPorts, processCwd } from './ports.js';
+import { PortProxy } from './proxy.js';
+import { refreshObservedPorts, scanProjects } from './scanner.js';
 import type { Project, ScanResult } from './types.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -70,9 +72,53 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     }
   };
 
+  /**
+   * 固定端口的转发目标：优先用配置里指定的 target，其次用项目自己声明的端口，
+   * 最后兜底用「任何 cwd 属于这个项目」的监听端口。每次连接都现查，端口变了也能跟上。
+   */
+  const resolveTarget = (projectId: string, preferred?: number): number | undefined => {
+    const project = cache?.projects.find((item) => item.id === projectId);
+    const stable = config.stablePorts[projectId]?.port;
+
+    const listeners = listeningPorts();
+    if (!listeners.size) return preferred;
+    const owned = new Set<number>();
+    for (const [port, pid] of listeners) {
+      if (port === stable) continue;
+      const cwd = processCwd(pid);
+      if (cwd && project && belongsTo(project.path, cwd)) owned.add(port);
+    }
+
+    if (preferred && owned.has(preferred)) return preferred;
+    for (const item of project?.ports ?? []) {
+      if (owned.has(item.port)) return item.port;
+    }
+    return [...owned][0];
+  };
+
+  const proxy = new PortProxy((projectId) => resolveTarget(projectId, config.stablePorts[projectId]?.target));
+
+  const withStablePort = (project: Project): Project => {
+    const stable = config.stablePorts[project.id];
+    if (!stable) return project;
+    return {
+      ...project,
+      stablePort: {
+        port: stable.port,
+        target: resolveTarget(project.id, stable.target),
+        listening: proxy.isListening(project.id),
+      },
+    };
+  };
+
   const withRuntime = async (force = false): Promise<ScanResult> => {
     const result = await ensureScan(force);
-    return { ...result, projects: sortProjects(result.projects.map((project) => decorate(project, pm))) };
+    // 端口状态每次都现场刷新，启动/停止后不用重新扫描整个目录
+    refreshObservedPorts(result.projects);
+    return {
+      ...result,
+      projects: sortProjects(result.projects.map((project) => withStablePort(decorate(project, pm)))),
+    };
   };
 
   app.get('/api/health', async () => ({ ok: true, version: '0.0.2' }));
@@ -93,9 +139,10 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   app.get('/api/projects/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await ensureScan();
+    refreshObservedPorts(result.projects);
     const found = result.projects.find((item) => item.id === id);
     if (!found) return reply.code(404).send({ error: 'project not found' });
-    const project = decorate(found, pm);
+    const project = withStablePort(decorate(found, pm));
 
     let readme = '';
     if (project.readmeFile) {
@@ -190,6 +237,41 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     return reply;
   });
 
+  app.put('/api/projects/:id/stable-port', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as { port?: number | null; target?: number | null };
+    const result = await ensureScan();
+    if (!result.projects.some((item) => item.id === id)) {
+      return reply.code(404).send({ ok: false, error: 'project not found' });
+    }
+
+    if (body.port == null) {
+      proxy.close(id);
+      delete config.stablePorts[id];
+      saveStablePort(config.configPath, id, null);
+      return { ok: true };
+    }
+
+    const port = Number(body.port);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      return reply.code(400).send({ ok: false, error: 'invalid port' });
+    }
+
+    try {
+      await proxy.listen(id, port);
+    } catch {
+      return reply.code(409).send({ ok: false, error: 'stable port is not available' });
+    }
+
+    const target = body.target == null ? undefined : Number(body.target);
+    config.stablePorts[id] = { port, ...(target ? { target } : {}) };
+    saveStablePort(config.configPath, id, config.stablePorts[id]);
+    return {
+      ok: true,
+      stablePort: { port, target: resolveTarget(id, target), listening: true },
+    };
+  });
+
   app.get('/api/runtime', async () => ({ runtimes: pm.list() }));
 
   const webDir = path.join(ROOT, 'dist/web');
@@ -204,6 +286,14 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   const url = `http://${config.host}:${config.port}`;
   await app.listen({ port: config.port, host: config.host });
 
+  for (const [id, stable] of Object.entries(config.stablePorts)) {
+    try {
+      await proxy.listen(id, stable.port);
+    } catch (error) {
+      console.warn(`[projectdeck] 固定端口 :${stable.port} 启动失败：${String((error as Error)?.message ?? error)}`);
+    }
+  }
+
   const result = await withRuntime();
   console.log(`\n  ProjectDeck  ${url}`);
   console.log(`  收录 ${result.projects.length} 个可运行项目（扫描 ${result.durationMs}ms，过滤 ${result.skipped.length} 个）`);
@@ -212,6 +302,7 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   if (config.openBrowser) openBrowser(url);
 
   const close = async () => {
+    proxy.closeAll();
     pm.shutdown();
     await new Promise((resolve) => setTimeout(resolve, 150));
     await app.close();

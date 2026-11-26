@@ -59,6 +59,8 @@ export interface Project {
   failure?: RunFailure;
   /** true = 由 ProjectDeck 启动，可以看实时日志 */
   managed?: boolean;
+  /** 固定端口：frpc / 反向代理指向它，项目真实端口变化不影响 */
+  stablePort?: { port: number; target?: number; listening: boolean };
   lastSeenAt: string;
 }
 
@@ -140,6 +142,17 @@ export function restartProject(id: string): Promise<ActionResult> {
 
 export function installProject(id: string): Promise<ActionResult> {
   return json(`/api/projects/${id}/install`, { method: 'POST' });
+}
+
+export function setStablePort(
+  id: string,
+  port: number | null,
+): Promise<{ ok: boolean; stablePort?: { port: number; target?: number; listening: boolean } }> {
+  return json(`/api/projects/${id}/stable-port`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ port }),
+  });
 }
 
 export function fetchLogs(

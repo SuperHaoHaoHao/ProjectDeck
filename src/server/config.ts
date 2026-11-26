@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export interface StablePortConfig {
+  /** ProjectDeck 监听的固定端口，给 frpc / 反向代理用 */
+  port: number;
+  /** 希望转发到的项目端口；不填就自动用项目当前实际监听的端口 */
+  target?: number;
+}
+
 export interface DeckConfig {
   port: number;
   host: string;
@@ -11,6 +18,28 @@ export interface DeckConfig {
   openBrowser: boolean;
   includeNonRunnable: boolean;
   configPath: string;
+  /** projectId → 固定端口 */
+  stablePorts: Record<string, StablePortConfig>;
+}
+
+/** 把固定端口写回 config.json，其它字段原样保留 */
+export function saveStablePort(
+  configPath: string,
+  projectId: string,
+  value: StablePortConfig | null,
+): void {
+  let raw: Record<string, unknown> = {};
+  try {
+    raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  } catch {}
+
+  const current = (raw.stablePorts as Record<string, StablePortConfig> | undefined) ?? {};
+  if (value) current[projectId] = value;
+  else delete current[projectId];
+  raw.stablePorts = current;
+
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
 }
 
 const DEFAULT_IGNORE = [
@@ -147,5 +176,6 @@ export function loadConfig(argv: string[]): DeckConfig {
     openBrowser: !args.noOpen,
     includeNonRunnable: args.all || Boolean(fileConfig.includeNonRunnable),
     configPath,
+    stablePorts: fileConfig.stablePorts ?? {},
   };
 }

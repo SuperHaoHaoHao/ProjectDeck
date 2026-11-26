@@ -5,6 +5,7 @@ import {
   installProject,
   rescan,
   restartProject,
+  setStablePort as apiSetStablePort,
   startProject,
   stopProject,
   type ActionResult,
@@ -170,6 +171,17 @@ export default function App() {
     }
   };
 
+  const changeStablePort = async (project: Project, port: number | null) => {
+    try {
+      await apiSetStablePort(project.id, port);
+      showToast(t('stable.saved'), 'ok');
+      await refresh();
+    } catch (err) {
+      showToast(t('stable.failed', { error: (err as Error).message }), 'error');
+      throw err;
+    }
+  };
+
   const counts = useMemo(() => {
     const map = new Map<Filter, number>([['all', data?.projects.length ?? 0]]);
     for (const project of data?.projects ?? []) {
@@ -307,6 +319,7 @@ export default function App() {
                 busy={busyId === selected.id}
                 onBack={() => setView({ name: 'projects' })}
                 onAction={act}
+                onStablePort={changeStablePort}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-zinc-500">
