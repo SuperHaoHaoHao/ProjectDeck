@@ -1,7 +1,7 @@
-import { Play, RotateCw, Square, Terminal } from 'lucide-react';
+import { AlertTriangle, Download, Play, RotateCw, Square, Terminal } from 'lucide-react';
 import type { Project } from '@/api';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { kindLabel } from './ProjectCard';
 import { StatusBadge } from './StatusBadge';
@@ -12,34 +12,39 @@ function ActionButton({
   onClick,
   tone,
   children,
+  label,
 }: {
   title: string;
   disabled?: boolean;
   onClick: () => void;
-  tone: 'start' | 'stop' | 'restart' | 'log';
+  tone: 'start' | 'stop' | 'restart' | 'log' | 'install';
   children: React.ReactNode;
+  label?: string;
 }) {
   const styles = {
     start: 'hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300',
     stop: 'hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300',
     restart: 'hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300',
     log: 'hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-300',
+    install: 'hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-300',
   }[tone];
   return (
     <button
       type="button"
       title={title}
+      aria-label={title}
       disabled={disabled}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
       }}
       className={cn(
-        'flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 text-zinc-500 transition-colors disabled:cursor-not-allowed disabled:opacity-30',
+        'flex h-7 items-center justify-center gap-1 rounded-md border border-zinc-800 px-2 font-mono text-[10px] text-zinc-500 transition-colors disabled:cursor-not-allowed disabled:opacity-30',
         styles,
       )}
     >
       {children}
+      {label ? <span className="hidden xl:inline">{label}</span> : null}
     </button>
   );
 }
@@ -53,7 +58,7 @@ export function ProjectList({
   projects: Project[];
   busyId?: string;
   onOpen: (project: Project) => void;
-  onAction: (project: Project, action: 'start' | 'stop' | 'restart') => void;
+  onAction: (project: Project, action: 'start' | 'stop' | 'restart' | 'install') => void;
 }) {
   const { t } = useI18n();
 
@@ -89,10 +94,26 @@ export function ProjectList({
                     ) : null}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[10px] text-zinc-600">{project.path}</div>
+                  {project.failure ? (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] text-red-400">
+                      <AlertTriangle size={10} />
+                      <span className="truncate">
+                        {t(`fail.${project.failure.code}` as MessageKey)}
+                        {project.failure.line ? (
+                          <span className="ml-1 font-mono text-[10px] text-red-500/60">{project.failure.line}</span>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : project.dependencies && !project.dependencies.installed ? (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400/90">
+                      <Download size={10} />
+                      {t('list.needsInstall')}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2.5 text-xs text-zinc-400">{t(kindLabel(project.kind))}</td>
                 <td className="px-3 py-2.5">
-                  <StatusBadge status={project.status} />
+                  <StatusBadge status={project.status} failing={Boolean(project.failure)} />
                 </td>
                 <td className="px-3 py-2.5">
                   {project.ports.length ? (
@@ -123,6 +144,7 @@ export function ProjectList({
                       running ? (
                         <ActionButton
                           title={t('action.stop')}
+                          label={t('action.stop')}
                           tone="stop"
                           disabled={busy}
                           onClick={() => onAction(project, 'stop')}
@@ -132,6 +154,7 @@ export function ProjectList({
                       ) : (
                         <ActionButton
                           title={t('action.start')}
+                          label={t('action.start')}
                           tone="start"
                           disabled={busy}
                           onClick={() => onAction(project, 'start')}
@@ -143,6 +166,7 @@ export function ProjectList({
                     {project.entry ? (
                       <ActionButton
                         title={t('action.restart')}
+                        label={t('action.restart')}
                         tone="restart"
                         disabled={busy}
                         onClick={() => onAction(project, 'restart')}
@@ -150,7 +174,18 @@ export function ProjectList({
                         <RotateCw size={12} className={cn(busy && 'animate-spin')} />
                       </ActionButton>
                     ) : null}
-                    <ActionButton title={t('action.logs')} tone="log" onClick={() => onOpen(project)}>
+                    {project.entry && project.dependencies && !project.dependencies.installed ? (
+                      <ActionButton
+                        title={t('action.install')}
+                        label={t('action.install')}
+                        tone="install"
+                        disabled={busy}
+                        onClick={() => onAction(project, 'install')}
+                      >
+                        <Download size={12} />
+                      </ActionButton>
+                    ) : null}
+                    <ActionButton title={t('action.logs')} label={t('action.logs')} tone="log" onClick={() => onOpen(project)}>
                       <Terminal size={12} />
                     </ActionButton>
                   </div>

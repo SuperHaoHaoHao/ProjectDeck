@@ -22,19 +22,25 @@ function decorate(project: Project, pm: ProcessManager): Project {
   const managed = pm.isRunning(project.id);
   let status = project.status;
   if (managed) status = 'running';
+  else if (runtime.status === 'error' && runtime.failure) status = 'error';
+  else if (project.status !== 'running' && runtime.failure) status = 'error';
   else if (project.status === 'running' && runtime.status === 'stopped' && runtime.lastOperation) status = 'stopped';
   return {
     ...project,
     status,
     lastOperation: runtime.lastOperation,
     startedAt: runtime.startedAt,
+    failure: runtime.failure,
   };
 }
 
+const STATUS_ORDER: Record<string, number> = { running: 0, error: 1, stopped: 2 };
+
 function sortProjects(projects: Project[]): Project[] {
   return [...projects].sort((a, b) => {
-    if (a.status === 'running' && b.status !== 'running') return -1;
-    if (b.status === 'running' && a.status !== 'running') return 1;
+    const rankA = STATUS_ORDER[a.status] ?? 3;
+    const rankB = STATUS_ORDER[b.status] ?? 3;
+    if (rankA !== rankB) return rankA - rankB;
     const aTime = a.lastOperation ?? '';
     const bTime = b.lastOperation ?? '';
     if (aTime !== bTime) return bTime.localeCompare(aTime);
@@ -105,7 +111,19 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     const project = result.projects.find((item) => item.id === id);
     if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
     try {
-      return { ok: true, runtime: pm.start(project) };
+      return await pm.start(project);
+    } catch (error) {
+      return reply.code(400).send({ ok: false, error: String((error as Error)?.message ?? error) });
+    }
+  });
+
+  app.post('/api/projects/:id/install', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await ensureScan();
+    const project = result.projects.find((item) => item.id === id);
+    if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
+    try {
+      return await pm.install(project);
     } catch (error) {
       return reply.code(400).send({ ok: false, error: String((error as Error)?.message ?? error) });
     }
@@ -126,7 +144,7 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     const project = result.projects.find((item) => item.id === id);
     if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
     try {
-      return { ok: true, runtime: await pm.restart(project) };
+      return await pm.restart(project);
     } catch (error) {
       return reply.code(400).send({ ok: false, error: String((error as Error)?.message ?? error) });
     }
@@ -192,14 +210,19 @@ export async function start(argv: string[] = process.argv.slice(2)) {
 
   if (config.openBrowser) openBrowser(url);
 
-  const shutdown = () => {
+  const close = async () => {
     pm.shutdown();
-    app.close().finally(() => process.exit(0));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await app.close();
+  };
+
+  const shutdown = () => {
+    close().finally(() => process.exit(0));
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 
-  return { app, url };
+  return { app, url, close };
 }
 
 const isDirect = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;

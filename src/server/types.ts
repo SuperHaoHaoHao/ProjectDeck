@@ -2,7 +2,7 @@ export type ProjectKind = 'service' | 'desktop' | 'miniapp' | 'mobile' | 'packag
 
 export type Runtime = 'node' | 'python' | 'go' | 'rust' | 'java' | 'swift' | 'android' | 'none';
 
-export type ProjectStatus = 'running' | 'stopped' | 'unknown' | 'n/a';
+export type ProjectStatus = 'running' | 'stopped' | 'error' | 'unknown' | 'n/a';
 
 export type Supervisor = 'pm2' | 'docker' | 'external' | 'none';
 
@@ -35,6 +35,33 @@ export interface Entry {
   source: 'detected' | 'manifest';
 }
 
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'none';
+
+export interface DependencyState {
+  manager: PackageManager;
+  /** 有依赖清单（package.json / requirements.txt） */
+  hasManifest: boolean;
+  /** 依赖看起来已经装好（node_modules / venv 存在） */
+  installed: boolean;
+  /** 可以一键执行的安装命令；只会是已知包管理器的固定参数 */
+  installCmd?: Entry;
+}
+
+/** 启动失败归类。服务端只回 code，文案由前端翻译 */
+export type FailureCode =
+  | 'port-in-use'
+  | 'missing-deps'
+  | 'missing-script'
+  | 'missing-runtime'
+  | 'permission'
+  | 'unknown';
+
+export interface RunFailure {
+  code: FailureCode;
+  /** 触发判断的原始日志行，便于用户排查 */
+  line: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -52,10 +79,13 @@ export interface Project {
   artifacts: Artifact[];
   tags: string[];
   readmeFile?: string;
+  dependencies: DependencyState;
   createdAt: string;
   runnable: boolean;
   lastOperation?: string;
   startedAt?: string;
+  /** 最近一次启动失败的归类，来自运行态 */
+  failure?: RunFailure;
   lastSeenAt: string;
 }
 

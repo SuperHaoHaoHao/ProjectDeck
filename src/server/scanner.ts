@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isIgnoredName, type DeckConfig } from './config.js';
-import { detect, readJson, type Detection, type PackageJson } from './detect.js';
+import { detect, detectDependencies, readJson, type Detection, type PackageJson } from './detect.js';
 import { readGit } from './git.js';
 import { belongsTo, detectPorts, listeningPorts, probePorts, processCwd } from './ports.js';
 import type { Artifact, Project, ProjectKind, Runtime, ScanResult, SkipReason, SkippedItem } from './types.js';
@@ -124,6 +124,7 @@ function buildProject(dir: string, detection: Detection, readmeFile?: string): P
     artifacts: findArtifacts(dir),
     tags: detection.markers,
     readmeFile,
+    dependencies: detectDependencies(dir, pkg, detection.runtime),
     createdAt: createdAt(dir),
     runnable,
     lastSeenAt: new Date().toISOString(),
@@ -163,6 +164,7 @@ function docsProject(dir: string): Project {
     artifacts: [],
     tags: ['markdown'],
     readmeFile,
+    dependencies: { manager: 'none', hasManifest: false, installed: true },
     createdAt: createdAt(dir),
     runnable: false,
     lastSeenAt: new Date().toISOString(),

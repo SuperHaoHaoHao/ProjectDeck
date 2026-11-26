@@ -1,10 +1,10 @@
-import { ArrowLeft, Check, Copy, Play, RotateCw, Square } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Check, Copy, Download, Play, RotateCw, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fetchProject, type Project } from '@/api';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Terminal } from './Terminal';
 import { KIND_ICON, kindLabel } from './ProjectCard';
@@ -47,7 +47,7 @@ export function ProjectDetail({
   project: Project;
   busy: boolean;
   onBack: () => void;
-  onAction: (project: Project, action: 'start' | 'stop' | 'restart') => void;
+  onAction: (project: Project, action: 'start' | 'stop' | 'restart' | 'install') => void;
 }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<'overview' | 'terminal'>(
@@ -55,6 +55,16 @@ export function ProjectDetail({
   );
   const [readme, setReadme] = useState('');
   const [loading, setLoading] = useState(true);
+  const wasRunning = useRef(project.status === 'running');
+
+  // 从停止切到运行，或启动失败，都直接切到终端，让用户马上看到输出
+  useEffect(() => {
+    const running = project.status === 'running';
+    if ((running && !wasRunning.current) || (project.failure && !wasRunning.current)) {
+      setTab('terminal');
+    }
+    wasRunning.current = running;
+  }, [project.status, project.failure]);
 
   useEffect(() => {
     let alive = true;
@@ -88,7 +98,7 @@ export function ProjectDetail({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-lg font-semibold text-zinc-100">{project.name}</h2>
               {project.version ? <span className="font-mono text-xs text-zinc-500">v{project.version}</span> : null}
-              <StatusBadge status={project.status} />
+              <StatusBadge status={project.status} failing={Boolean(project.failure)} />
               <Badge variant="mono">{t(kindLabel(project.kind))}</Badge>
             </div>
             <div className="mt-1 flex items-center gap-2">
@@ -118,8 +128,46 @@ export function ProjectDetail({
                 {t('action.restart')}
               </Button>
             ) : null}
+            {project.entry && project.dependencies && !project.dependencies.installed ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => onAction(project, 'install')}
+                title={t('detail.depsInstallHint')}
+              >
+                <Download size={12} />
+                {t('action.install')}
+              </Button>
+            ) : null}
           </div>
         </div>
+
+        {project.failure ? (
+          <div
+            data-testid="failure-banner"
+            className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/5 px-3 py-2 pl-12"
+          >
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-red-300">
+                {t('detail.failure')}：{t(`fail.${project.failure.code}` as MessageKey)}
+              </div>
+              {project.failure.line ? (
+                <code className="mt-0.5 block truncate font-mono text-[10px] text-red-400/70">
+                  {project.failure.line}
+                </code>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => setTab('terminal')}
+              className="shrink-0 rounded-md border border-red-500/30 px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10"
+            >
+              {t('detail.viewLogs')}
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-center gap-1 border-b border-transparent pl-12">
           {(
@@ -183,6 +231,21 @@ export function ProjectDetail({
                         :{port.port}
                       </span>
                     ))}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </Row>
+              <Row label={t('detail.deps')}>
+                {project.dependencies?.hasManifest ? (
+                  <span
+                    className={cn(
+                      'font-mono',
+                      project.dependencies.installed ? 'text-emerald-300' : 'text-amber-300',
+                    )}
+                  >
+                    {project.dependencies.manager} ·{' '}
+                    {t(project.dependencies.installed ? 'detail.depsReady' : 'detail.depsMissing')}
                   </span>
                 ) : (
                   '—'

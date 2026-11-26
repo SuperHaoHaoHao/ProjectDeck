@@ -62,6 +62,15 @@ export function expandHome(p: string): string {
   return p;
 }
 
+/**
+ * 所有运行态文件（config.json / runtime.json / logs）的根目录。
+ * PROJECTDECK_HOME 用于测试隔离，默认 ~/.projectdeck。
+ */
+export function stateDir(): string {
+  const override = process.env.PROJECTDECK_HOME?.trim();
+  return override ? path.resolve(expandHome(override)) : path.join(os.homedir(), '.projectdeck');
+}
+
 function firstExisting(candidates: string[]): string[] {
   const found = candidates.map(expandHome).filter((p) => {
     try {
@@ -105,7 +114,7 @@ export function parseArgs(argv: string[]): {
 
 export function loadConfig(argv: string[]): DeckConfig {
   const args = parseArgs(argv);
-  const dir = path.join(os.homedir(), '.projectdeck');
+  const dir = stateDir();
   const configPath = path.join(dir, 'config.json');
 
   let fileConfig: Partial<DeckConfig> = {};

@@ -2,10 +2,12 @@ import { AlertTriangle, CheckCircle2, Languages, RefreshCw, Search, XCircle } fr
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchProjects,
+  installProject,
   rescan,
   restartProject,
   startProject,
   stopProject,
+  type ActionResult,
   type Project,
   type ProjectKind,
   type ScanResult,
@@ -18,7 +20,7 @@ import { ScanModal } from './components/ScanModal';
 import { SettingsView } from './components/SettingsView';
 import { Sidebar, type NavKey } from './components/Sidebar';
 import { Button } from './components/ui/button';
-import { useI18n } from './lib/i18n';
+import { useI18n, type MessageKey } from './lib/i18n';
 import { cn } from './lib/utils';
 
 type Filter = ProjectKind | 'all';
@@ -58,13 +60,15 @@ export default function App() {
   const [busyId, setBusyId] = useState<string>();
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
 
-  const refresh = useCallback(async (silent = true) => {
+  const refresh = useCallback(async (silent = true): Promise<ScanResult | null> => {
     try {
       const result = await fetchProjects();
       setData(result);
       setError('');
+      return result;
     } catch (err) {
       if (!silent) setError((err as Error).message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -105,19 +109,59 @@ export default function App() {
     window.setTimeout(() => setToast(null), 2600);
   };
 
-  const act = async (project: Project, action: 'start' | 'stop' | 'restart') => {
+  const act = async (project: Project, action: 'start' | 'stop' | 'restart' | 'install') => {
     setBusyId(project.id);
     try {
-      if (action === 'start') await startProject(project.id);
-      else if (action === 'stop') await stopProject(project.id);
-      else await restartProject(project.id);
-      const toastKey =
-        action === 'start'
-          ? 'app.toast.started'
-          : action === 'stop'
-            ? 'app.toast.stopped'
-            : 'app.toast.restarted';
-      showToast(t(toastKey, { name: project.name }), 'ok');
+      let result: ActionResult;
+      if (action === 'start') result = await startProject(project.id);
+      else if (action === 'stop') result = await stopProject(project.id);
+      else if (action === 'install') result = await installProject(project.id);
+      else result = await restartProject(project.id);
+
+      if (action === 'install') {
+        showToast(
+          result.ok
+            ? t('app.toast.installed', { name: project.name })
+            : t('app.toast.installFailed', {
+                name: project.name,
+                reason: t(`fail.${result.failure?.code ?? 'unknown'}` as MessageKey),
+              }),
+          result.ok ? 'ok' : 'error',
+        );
+      } else if ((action === 'start' || action === 'restart') && !result.ok) {
+        // 启动失败要立刻说清楚原因，而不是假装成功
+        showToast(
+          t('app.toast.startFailed', {
+            name: project.name,
+            reason: t(`fail.${result.failure?.code ?? 'unknown'}` as MessageKey),
+          }),
+          'error',
+        );
+      } else {
+        const toastKey =
+          action === 'start'
+            ? 'app.toast.started'
+            : action === 'stop'
+              ? 'app.toast.stopped'
+              : 'app.toast.restarted';
+        showToast(t(toastKey, { name: project.name }), 'ok');
+        // 有些项目（比如 npm 包着一层 vite/nest）会晚一两秒才吐出错误
+        if (action === 'start' || action === 'restart') {
+          window.setTimeout(async () => {
+            const fresh = await refresh();
+            const updated = fresh?.projects.find((item) => item.id === project.id);
+            if (updated?.failure) {
+              showToast(
+                t('app.toast.startFailed', {
+                  name: project.name,
+                  reason: t(`fail.${updated.failure.code}` as MessageKey),
+                }),
+                'error',
+              );
+            }
+          }, 2500);
+        }
+      }
       window.setTimeout(() => refresh(), 500);
     } catch (err) {
       showToast(t('app.toast.failed', { action: t(`action.${action}`), error: (err as Error).message }), 'error');
@@ -218,7 +262,13 @@ export default function App() {
                 ) : null}
               </div>
             ) : null}
-            <Button variant="ghost" size="sm" onClick={toggle} title={t('common.language')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggle}
+              title={t('common.language')}
+              aria-label={t('common.language')}
+            >
               <Languages size={13} />
               {lang === 'zh' ? 'EN' : '中文'}
             </Button>
@@ -308,6 +358,8 @@ export default function App() {
                   skipped={data?.skipped.length ?? 0}
                   durationMs={data?.durationMs ?? 0}
                   onOpen={(project) => setView({ name: 'project', id: project.id })}
+                  onAction={act}
+                  busyId={busyId}
                 />
               ) : (
                 <ProjectList

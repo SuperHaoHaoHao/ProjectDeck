@@ -4,8 +4,10 @@ import {
   FileText,
   Layers,
   Package,
+  Play,
   Server,
   Smartphone,
+  Square,
 } from 'lucide-react';
 import type { Project, ProjectKind } from '@/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
@@ -30,33 +32,46 @@ const KIND_COLOR: Record<ProjectKind, string> = {
   docs: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
 };
 
-function StatusDot({ status }: { status: Project['status'] }) {
-  const color =
-    status === 'running'
+function StatusDot({ status, failing }: { status: Project['status']; failing?: boolean }) {
+  const color = failing
+    ? 'bg-amber-400'
+    : status === 'running'
       ? 'bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.15)]'
-      : status === 'stopped'
-        ? 'bg-zinc-600'
-        : 'bg-zinc-700';
+      : status === 'error'
+        ? 'bg-red-400'
+        : status === 'stopped'
+          ? 'bg-zinc-600'
+          : 'bg-zinc-700';
   return <span className={cn('h-2 w-2 shrink-0 rounded-full', color)} />;
 }
 
 export function ProjectCard({
   project,
   onOpen,
+  onAction,
+  busy,
 }: {
   project: Project;
   onOpen: (project: Project) => void;
+  onAction?: (project: Project, action: 'start' | 'stop') => void;
+  busy?: boolean;
 }) {
   const { t } = useI18n();
   const Icon = KIND_ICON[project.kind] ?? Boxes;
   const visibleStack = project.stack.slice(0, 4);
   const hiddenStack = project.stack.length - visibleStack.length;
 
+  const running = project.status === 'running';
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(project)}
-      className="group relative flex flex-col gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/70"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onOpen(project);
+      }}
+      className="group relative flex cursor-pointer flex-col gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/70"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2.5">
@@ -70,7 +85,7 @@ export function ProjectCard({
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <StatusDot status={project.status} />
+              <StatusDot status={project.status} failing={Boolean(project.failure)} />
               <h3 className="truncate text-[15px] font-semibold text-zinc-100">{project.name}</h3>
               {project.version ? (
                 <span className="shrink-0 font-mono text-[11px] text-zinc-500">v{project.version}</span>
@@ -114,11 +129,32 @@ export function ProjectCard({
           {project.git?.branch ? (
             <span className="max-w-[110px] truncate font-mono">{project.git.branch}</span>
           ) : null}
-          {project.git?.lastDate ? <span>{project.git.lastDate}</span> : null}
-          <Layers size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+          {project.entry && onAction ? (
+            <button
+              type="button"
+              data-testid="card-action"
+              disabled={busy}
+              title={running ? t('card.stop') : t('card.start')}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAction(project, running ? 'stop' : 'start');
+              }}
+              className={cn(
+                'flex h-6 items-center gap-1 rounded-md border px-2 text-[10px] transition-colors disabled:opacity-40',
+                running
+                  ? 'border-red-500/30 text-red-300 hover:bg-red-500/10'
+                  : 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10',
+              )}
+            >
+              {running ? <Square size={9} /> : <Play size={9} />}
+              {running ? t('card.stop') : t('card.start')}
+            </button>
+          ) : (
+            <Layers size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 

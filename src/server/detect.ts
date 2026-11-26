@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Entry, ProjectKind, Runtime } from './types.js';
+import type { DependencyState, Entry, PackageManager, ProjectKind, Runtime } from './types.js';
 
 export interface PackageJson {
   name?: string;
@@ -62,6 +62,49 @@ export function detectPackageManager(dir: string): 'pnpm' | 'yarn' | 'bun' | 'np
   if (exists(path.join(dir, 'yarn.lock'))) return 'yarn';
   if (exists(path.join(dir, 'bun.lockb')) || exists(path.join(dir, 'bun.lock'))) return 'bun';
   return 'npm';
+}
+
+/** 自己或最多上溯 3 层父目录里有没有 node_modules（monorepo 依赖会被提升到根） */
+function hasNodeModules(dir: string): boolean {
+  let current = dir;
+  for (let depth = 0; depth < 4; depth++) {
+    if (exists(path.join(current, 'node_modules'))) return true;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return false;
+}
+
+export function detectDependencies(dir: string, pkg: PackageJson | null, runtime: Runtime): DependencyState {
+  if (pkg) {
+    const manager = detectPackageManager(dir);
+    const declared = Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length;
+    return {
+      manager,
+      hasManifest: true,
+      // 没有声明依赖的项目不需要 node_modules
+      installed: declared === 0 || hasNodeModules(dir),
+      installCmd: { cmd: manager, args: ['install'], cwd: dir, source: 'detected' },
+    };
+  }
+
+  if (runtime === 'python') {
+    const requirements = exists(path.join(dir, 'requirements.txt'));
+    const venv = ['.venv', 'venv'].map((name) => path.join(dir, name)).find((p) => exists(p));
+    const pip = venv ? path.join(venv, 'bin', 'pip') : undefined;
+    return {
+      manager: 'pip',
+      hasManifest: requirements || exists(path.join(dir, 'pyproject.toml')),
+      installed: Boolean(venv),
+      installCmd:
+        requirements && pip
+          ? { cmd: pip, args: ['install', '-r', 'requirements.txt'], cwd: dir, source: 'detected' }
+          : undefined,
+    };
+  }
+
+  return { manager: 'none' as PackageManager, hasManifest: false, installed: true };
 }
 
 function findXcodeProject(dir: string): string | undefined {

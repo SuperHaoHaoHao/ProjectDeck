@@ -1,5 +1,25 @@
 export type ProjectKind = 'service' | 'desktop' | 'miniapp' | 'mobile' | 'package' | 'docs';
-export type ProjectStatus = 'running' | 'stopped' | 'unknown' | 'n/a';
+export type ProjectStatus = 'running' | 'stopped' | 'error' | 'unknown' | 'n/a';
+
+export type FailureCode =
+  | 'port-in-use'
+  | 'missing-deps'
+  | 'missing-script'
+  | 'missing-runtime'
+  | 'permission'
+  | 'unknown';
+
+export interface RunFailure {
+  code: FailureCode;
+  line: string;
+}
+
+export interface DependencyState {
+  manager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'none';
+  hasManifest: boolean;
+  installed: boolean;
+  installCmd?: { cmd: string; args: string[]; cwd: string; source: string };
+}
 
 export interface PortInfo {
   port: number;
@@ -31,10 +51,12 @@ export interface Project {
   artifacts: { type: string; name: string; version?: string }[];
   tags: string[];
   readmeFile?: string;
+  dependencies: DependencyState;
   createdAt: string;
   runnable: boolean;
   lastOperation?: string;
   startedAt?: string;
+  failure?: RunFailure;
   lastSeenAt: string;
 }
 
@@ -64,11 +86,13 @@ export interface RuntimeState {
   status: 'running' | 'stopped' | 'error';
   pid?: number;
   command?: string;
+  kind?: 'run' | 'install';
   startedAt?: string;
   stoppedAt?: string;
   lastOperation?: string;
   exitCode?: number | null;
   error?: string;
+  failure?: RunFailure;
 }
 
 async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -94,16 +118,26 @@ export function fetchProject(
   return json(`/api/projects/${id}`);
 }
 
-export function startProject(id: string): Promise<{ ok: boolean; runtime: RuntimeState }> {
+export interface ActionResult {
+  ok: boolean;
+  runtime: RuntimeState;
+  failure?: RunFailure;
+}
+
+export function startProject(id: string): Promise<ActionResult> {
   return json(`/api/projects/${id}/start`, { method: 'POST' });
 }
 
-export function stopProject(id: string): Promise<{ ok: boolean; runtime: RuntimeState }> {
+export function stopProject(id: string): Promise<ActionResult> {
   return json(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
-export function restartProject(id: string): Promise<{ ok: boolean; runtime: RuntimeState }> {
+export function restartProject(id: string): Promise<ActionResult> {
   return json(`/api/projects/${id}/restart`, { method: 'POST' });
+}
+
+export function installProject(id: string): Promise<ActionResult> {
+  return json(`/api/projects/${id}/install`, { method: 'POST' });
 }
 
 export function fetchLogs(

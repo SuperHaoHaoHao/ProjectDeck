@@ -38,6 +38,8 @@ export function Dashboard({
   skipped,
   durationMs,
   onOpen,
+  onAction,
+  busyId,
 }: {
   projects: Project[];
   total: number;
@@ -46,6 +48,8 @@ export function Dashboard({
   skipped: number;
   durationMs: number;
   onOpen: (project: Project) => void;
+  onAction?: (project: Project, action: 'start' | 'stop') => void;
+  busyId?: string;
 }) {
   const { t } = useI18n();
 
@@ -90,7 +94,13 @@ export function Dashboard({
         {projects.length ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {projects.map((project) => (
-              <ProjectCard key={project.id} project={project} onOpen={onOpen} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onOpen={onOpen}
+                onAction={onAction}
+                busy={busyId === project.id}
+              />
             ))}
           </div>
         ) : (
