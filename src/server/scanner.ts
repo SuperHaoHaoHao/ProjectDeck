@@ -171,11 +171,43 @@ function docsProject(dir: string): Project {
   };
 }
 
+export interface OwnedListener {
+  port: number;
+  pid: number;
+  cwd: string;
+}
+
+/**
+ * 找出「归属这个项目」的所有监听进程：cwd 落在项目目录里，且按最深路径归属。
+ * 用于启动前回收旧进程、停止后清残余。
+ */
+export function projectListeners(
+  projects: Project[],
+  projectId: string,
+  excludePid = process.pid,
+  excludePorts?: Set<number>,
+): OwnedListener[] {
+  const listeners = listeningPorts();
+  if (!listeners.size) return [];
+
+  const ranked = [...projects].sort((a, b) => normalizePath(b.path).length - normalizePath(a.path).length);
+  const out: OwnedListener[] = [];
+  for (const [port, pid] of listeners) {
+    if (pid === excludePid) continue;
+    if (excludePorts?.has(port)) continue;
+    const cwd = processCwd(pid);
+    if (!cwd) continue;
+    const owner = ranked.find((project) => belongsTo(project.path, cwd));
+    if (owner?.id === projectId) out.push({ port, pid, cwd });
+  }
+  return out;
+}
+
 /**
  * 用 lsof 现场刷新「谁在监听哪个端口」，不重新遍历目录。
  * 这样启动/停止后端口立刻变绿变灰，写死在代码里的端口（如 8365）也能显示出来。
  */
-export function refreshObservedPorts(projects: Project[]): void {
+export function refreshObservedPorts(projects: Project[], excludePorts?: Set<number>): void {
   const listeners = listeningPorts();
   if (!listeners.size) return;
 
@@ -184,6 +216,8 @@ export function refreshObservedPorts(projects: Project[]): void {
   const unknownOwner = new Set<number>();
 
   for (const [port, pid] of listeners) {
+    // 固定端口是 ProjectDeck 自己监听的，不能算到某个项目头上
+    if (excludePorts?.has(port)) continue;
     const owner = processCwd(pid);
     if (!owner) {
       unknownOwner.add(port);
@@ -223,8 +257,36 @@ export function refreshObservedPorts(projects: Project[]): void {
   }
 }
 
-export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
+export interface ScanProgress {
+  scannedDirs: number;
+  projects: number;
+  skipped: number;
+  currentPath?: string;
+  /** 最近识别到的几个项目名，用来做扫描时的动态展示 */
+  recent: string[];
+  elapsedMs: number;
+}
+
+export async function scanProjects(
+  config: DeckConfig,
+  onProgress?: (progress: ScanProgress) => void,
+): Promise<ScanResult> {
   const started = Date.now();
+  let lastEmit = 0;
+  const emit = (currentPath?: string) => {
+    if (!onProgress) return;
+    const now = Date.now();
+    if (now - lastEmit < 120) return;
+    lastEmit = now;
+    onProgress({
+      scannedDirs,
+      projects: projects.length,
+      skipped: skipped.length,
+      currentPath,
+      recent: projects.slice(-5).map((project) => project.name),
+      elapsedMs: now - started,
+    });
+  };
   const projects: Project[] = [];
   const skipped: SkippedItem[] = [];
   const errors: string[] = [];
@@ -245,6 +307,7 @@ export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
     if (seen.has(real)) return;
     seen.add(real);
     scannedDirs += 1;
+    emit(dir);
 
     let detection: Detection | null = null;
     try {
@@ -318,7 +381,9 @@ export async function scanProjects(config: DeckConfig): Promise<ScanResult> {
     const attributed = new Map<number, { owner: string; project: Project }>();
     const unknownOwner = new Set<number>();
 
+    const stablePorts = new Set(Object.values(config.stablePorts ?? {}).map((value) => value.port));
     for (const [port, pid] of listeners) {
+      if (stablePorts.has(port)) continue;
       const owner = processCwd(pid);
       if (!owner) {
         unknownOwner.add(port);

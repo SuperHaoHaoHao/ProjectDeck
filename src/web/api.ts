@@ -116,6 +116,19 @@ export function rescan(): Promise<ScanResult> {
   return json<ScanResult>('/api/scan', { method: 'POST' });
 }
 
+export function scanStreamUrl(): string {
+  return '/api/scan/stream';
+}
+
+export interface ScanProgress {
+  scannedDirs: number;
+  projects: number;
+  skipped: number;
+  currentPath?: string;
+  recent: string[];
+  elapsedMs: number;
+}
+
 export function fetchProject(
   id: string,
 ): Promise<{ project: Project; readme: string; runtime: RuntimeState }> {

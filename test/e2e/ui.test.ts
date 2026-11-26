@@ -57,10 +57,15 @@ describe('ProjectDeck UI', { skip: executable ? false : 'no Chrome/Chromium foun
       .waitFor({ timeout: 20_000 });
   });
 
-  it('opens the project and streams real logs into the terminal', async () => {
+  it('opens on the overview tab, then streams real logs into the terminal', async () => {
     await page.locator('tbody tr').filter({ hasText: 'service' }).first().click();
     await page.waitForURL(/#\/project\//);
 
+    // 默认应该是概览，不是终端
+    await page.getByText('运行信息').first().waitFor({ timeout: 10_000 });
+    assert.equal(await page.getByText(/fixture-service ready on/).count(), 0);
+
+    await page.getByRole('button', { name: '终端日志' }).click();
     await page.getByText(/fixture-service ready on http:\/\/127\.0\.0\.1:\d+/).waitFor({ timeout: 20_000 });
     assert.equal(await page.locator('[data-testid="failure-banner"]').count(), 0);
   });

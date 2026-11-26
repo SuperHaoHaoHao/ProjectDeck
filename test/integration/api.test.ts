@@ -198,7 +198,7 @@ describe('ProjectDeck API', () => {
     await waitFor(() => (stale.pid && !isAlive(stale.pid) ? true : undefined), { label: 'stale process killed' });
 
     const logs = await api<{ lines: string }>(deck.base, `/api/projects/${fixed.id}/logs`);
-    assert.match(logs.lines, /残留进程/);
+    assert.match(logs.lines, /回收旧进程|残留进程/);
 
     await api<ActionResult>(deck.base, `/api/projects/${fixed.id}/stop`, { method: 'POST' });
     await waitFor(async () => ((await isPortOpen(fixedPort)) ? undefined : true), { label: 'port released' });
@@ -330,6 +330,60 @@ describe('ProjectDeck API', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ port: null }),
     });
+  });
+
+  it('reaps stale listeners of the project even when their port is not declared', async () => {
+    const project = find('missing-deps');
+    assert.ok(project);
+    assert.equal(project.ports.length, 0, 'this fixture declares no ports');
+
+    const stray = spawn(
+      'node',
+      ['-e', 'require("node:http").createServer((_,r)=>r.end("x")).listen(0,"127.0.0.1")'],
+      { cwd: path.join(deck.root, 'missing-deps'), stdio: 'ignore' },
+    );
+    if (stray.pid) spawned.push(stray.pid);
+    await waitFor(() => (stray.pid && isAlive(stray.pid) ? true : undefined), { label: 'stray listener' });
+
+    const started = await api<ActionResult>(deck.base, `/api/projects/${project.id}/start`, { method: 'POST' });
+    assert.equal(started.ok, true, `start should succeed: ${JSON.stringify(started.failure)}`);
+    await waitFor(() => (stray.pid && !isAlive(stray.pid) ? true : undefined), { label: 'stray reaped' });
+
+    const logs = await api<{ lines: string }>(deck.base, `/api/projects/${project.id}/logs`);
+    assert.match(logs.lines, /回收旧进程/);
+
+    await api<ActionResult>(deck.base, `/api/projects/${project.id}/stop`, { method: 'POST' });
+  });
+
+  it('streams a scan and finishes with the full result', async () => {
+    const controller = new AbortController();
+    const response = await fetch(`${deck.base}/api/scan/stream`, { signal: controller.signal });
+    assert.equal(response.status, 200);
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let donePayload = '';
+    let finished = false;
+
+    const deadline = Date.now() + 20_000;
+    while (!finished && Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        if (!block.includes('event: done')) continue;
+        donePayload = block.split('\n').find((line) => line.startsWith('data: '))?.slice(6) ?? '';
+        finished = true;
+      }
+    }
+    controller.abort();
+
+    assert.equal(finished, true, 'scan stream must end with a done event');
+    const result = JSON.parse(donePayload) as { projects: { name: string }[] };
+    assert.ok(result.projects.some((project) => project.name === 'service'));
   });
 
   it('reports a failure when the start command crashes', async () => {

@@ -13,7 +13,7 @@ const zh = {
   'nav.neverScanned': '还没有扫描',
   'nav.rescan': '重新扫描并查看报告',
   'nav.scanning': '扫描中…',
-  'nav.footer': 'v0.0.2 · 仅本机',
+  'nav.footer': 'v0.1.0 · 仅本机',
 
   'app.title.dashboard': '仪表盘',
   'app.title.projects': '项目列表',
@@ -86,7 +86,7 @@ const zh = {
   'list.status': '状态',
   'list.ports': '端口',
   'list.createdAt': '创建时间',
-  'list.lastOperation': '最后操作',
+  'list.lastCommit': '最近提交',
   'list.actions': '操作',
   'list.empty': '没有匹配的项目',
 
@@ -172,6 +172,8 @@ const zh = {
   'scan.reason.no-entry': '没有启动命令（纯包 / 组件库）',
   'scan.none': '没有过滤任何目录。',
   'scan.empty': '还没有扫描结果',
+  'scan.running': '正在扫描目录…',
+  'scan.failed': '扫描失败：{error}',
 
   'settings.title': '扫描配置',
   'settings.configFile': '配置文件',
@@ -188,6 +190,7 @@ const zh = {
   'settings.howTo3': '想连纯文档、组件库也显示出来，加 --all 启动。',
 
   'common.copy': '复制',
+  'common.copyPath': '复制路径',
   'common.close': '关闭',
   'common.back': '返回',
   'common.language': '语言',
@@ -204,7 +207,7 @@ const en: Record<keyof typeof zh, string> = {
   'nav.neverScanned': 'Not scanned yet',
   'nav.rescan': 'Rescan & view report',
   'nav.scanning': 'Scanning…',
-  'nav.footer': 'v0.0.2 · local only',
+  'nav.footer': 'v0.1.0 · local only',
 
   'app.title.dashboard': 'Dashboard',
   'app.title.projects': 'Projects',
@@ -277,7 +280,7 @@ const en: Record<keyof typeof zh, string> = {
   'list.status': 'Status',
   'list.ports': 'Ports',
   'list.createdAt': 'Created',
-  'list.lastOperation': 'Last action',
+  'list.lastCommit': 'Last commit',
   'list.actions': 'Actions',
   'list.empty': 'No matching projects',
 
@@ -363,6 +366,8 @@ const en: Record<keyof typeof zh, string> = {
   'scan.reason.no-entry': 'No start command (package or library)',
   'scan.none': 'Nothing was filtered.',
   'scan.empty': 'No scan result yet',
+  'scan.running': 'Scanning directories…',
+  'scan.failed': 'Scan failed: {error}',
 
   'settings.title': 'Scan settings',
   'settings.configFile': 'Config file',
@@ -378,6 +383,7 @@ const en: Record<keyof typeof zh, string> = {
   'settings.howTo2': 'Or override from the CLI:',
   'settings.howTo3': 'To include docs-only and package folders, start with --all.',
   'common.copy': 'Copy',
+  'common.copyPath': 'Copy path',
   'common.close': 'Close',
   'common.back': 'Back',
   'common.language': 'Language',

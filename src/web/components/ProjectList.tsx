@@ -1,53 +1,12 @@
 import { AlertTriangle, Download, Play, RotateCw, Square, Terminal } from 'lucide-react';
 import type { Project } from '@/api';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { CopyButton } from './CopyButton';
 import { kindLabel } from './ProjectCard';
 import { StatusBadge } from './StatusBadge';
-
-function ActionButton({
-  title,
-  disabled,
-  onClick,
-  tone,
-  children,
-  label,
-}: {
-  title: string;
-  disabled?: boolean;
-  onClick: () => void;
-  tone: 'start' | 'stop' | 'restart' | 'log' | 'install';
-  children: React.ReactNode;
-  label?: string;
-}) {
-  const styles = {
-    start: 'hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300',
-    stop: 'hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300',
-    restart: 'hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300',
-    log: 'hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-300',
-    install: 'hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-300',
-  }[tone];
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      disabled={disabled}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={cn(
-        'flex h-7 items-center justify-center gap-1 rounded-md border border-zinc-800 px-2 font-mono text-[10px] text-zinc-500 transition-colors disabled:cursor-not-allowed disabled:opacity-30',
-        styles,
-      )}
-    >
-      {children}
-      {label ? <span className="hidden xl:inline">{label}</span> : null}
-    </button>
-  );
-}
+import { ActionButton } from './ui/action-button';
 
 export function ProjectList({
   projects,
@@ -72,7 +31,7 @@ export function ProjectList({
             <th className="px-3 py-2.5">{t('list.status')}</th>
             <th className="px-3 py-2.5">{t('list.ports')}</th>
             <th className="px-3 py-2.5">{t('list.createdAt')}</th>
-            <th className="px-3 py-2.5">{t('list.lastOperation')}</th>
+            <th className="px-3 py-2.5">{t('list.lastCommit')}</th>
             <th className="px-4 py-2.5 text-right">{t('list.actions')}</th>
           </tr>
         </thead>
@@ -86,12 +45,13 @@ export function ProjectList({
                 onClick={() => onOpen(project)}
                 className="cursor-pointer border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30"
               >
-                <td className="max-w-[320px] px-4 py-2.5">
-                  <div className="flex items-center gap-2">
+                <td className="max-w-[300px] px-4 py-2.5">
+                  <div className="flex items-center gap-1.5">
                     <span className="truncate font-medium text-zinc-200">{project.name}</span>
                     {project.version ? (
                       <span className="shrink-0 font-mono text-[10px] text-zinc-600">v{project.version}</span>
                     ) : null}
+                    <CopyButton value={project.path} className="h-5 w-5" />
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[10px] text-zinc-600">{project.path}</div>
                   {project.failure ? (
@@ -143,60 +103,66 @@ export function ProjectList({
                     <span className="text-[11px] text-zinc-600">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[11px] text-zinc-500">{formatDate(project.createdAt)}</td>
-                <td className="px-3 py-2.5 text-[11px] text-zinc-500">
-                  {formatDateTime(project.lastOperation ?? project.git?.lastDate)}
+                <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-zinc-500">
+                  {formatDate(project.createdAt)}
+                </td>
+                <td className="max-w-[240px] px-3 py-2.5">
+                  {project.git ? (
+                    <>
+                      <div className="font-mono text-[10px] text-zinc-500">{project.git.lastDate || '—'}</div>
+                      <div className="truncate text-[11px] text-zinc-400" title={project.git.lastCommit}>
+                        {project.git.lastCommit || '—'}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-zinc-600">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center justify-end gap-1">
                     {project.entry ? (
                       running ? (
                         <ActionButton
-                          title={t('action.stop')}
-                          label={t('action.stop')}
                           tone="stop"
+                          label={t('action.stop')}
+                          icon={<Square size={11} />}
                           disabled={busy}
                           onClick={() => onAction(project, 'stop')}
-                        >
-                          <Square size={12} />
-                        </ActionButton>
+                        />
                       ) : (
                         <ActionButton
-                          title={t('action.start')}
-                          label={t('action.start')}
                           tone="start"
+                          label={t('action.start')}
+                          icon={<Play size={11} />}
                           disabled={busy}
                           onClick={() => onAction(project, 'start')}
-                        >
-                          <Play size={12} />
-                        </ActionButton>
+                        />
                       )
                     ) : null}
                     {project.entry ? (
                       <ActionButton
-                        title={t('action.restart')}
-                        label={t('action.restart')}
                         tone="restart"
+                        label={t('action.restart')}
+                        icon={<RotateCw size={11} className={cn(busy && 'animate-spin')} />}
                         disabled={busy}
                         onClick={() => onAction(project, 'restart')}
-                      >
-                        <RotateCw size={12} className={cn(busy && 'animate-spin')} />
-                      </ActionButton>
+                      />
                     ) : null}
                     {project.entry && project.dependencies && !project.dependencies.installed ? (
                       <ActionButton
-                        title={t('action.install')}
-                        label={t('action.install')}
                         tone="install"
+                        label={t('action.install')}
+                        icon={<Download size={11} />}
                         disabled={busy}
                         onClick={() => onAction(project, 'install')}
-                      >
-                        <Download size={12} />
-                      </ActionButton>
+                      />
                     ) : null}
-                    <ActionButton title={t('action.logs')} label={t('action.logs')} tone="log" onClick={() => onOpen(project)}>
-                      <Terminal size={12} />
-                    </ActionButton>
+                    <ActionButton
+                      tone="log"
+                      label={t('action.logs')}
+                      icon={<Terminal size={11} />}
+                      onClick={() => onOpen(project)}
+                    />
                   </div>
                 </td>
               </tr>

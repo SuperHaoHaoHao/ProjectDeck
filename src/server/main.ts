@@ -8,7 +8,13 @@ import { loadConfig, readStablePorts, saveStablePort, writeStablePorts } from '.
 import { ProcessManager } from './pm.js';
 import { belongsTo, isPortOpen, listeningPorts, processCwd } from './ports.js';
 import { PortProxy } from './proxy.js';
-import { refreshObservedPorts, scanProjects } from './scanner.js';
+import {
+  projectListeners,
+  refreshObservedPorts,
+  scanProjects,
+  type OwnedListener,
+  type ScanProgress,
+} from './scanner.js';
 import type { Project, ScanResult } from './types.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -58,18 +64,29 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   const pm = new ProcessManager();
 
   let cache: ScanResult | null = null;
-  let scanning = false;
+  let inflight: Promise<ScanResult> | null = null;
+  const progressSubscribers = new Set<(progress: ScanProgress) => void>();
+
+  /** 同一时间只跑一次扫描，所有订阅者共享进度 */
+  const runScan = (): Promise<ScanResult> => {
+    if (inflight) return inflight;
+    inflight = scanProjects(config, (progress) => {
+      for (const subscriber of progressSubscribers) subscriber(progress);
+    })
+      .then((result) => {
+        cache = result;
+        return result;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+    return inflight;
+  };
 
   const ensureScan = async (force = false): Promise<ScanResult> => {
     if (cache && !force) return cache;
-    if (scanning && cache) return cache;
-    scanning = true;
-    try {
-      cache = await scanProjects(config);
-      return cache;
-    } finally {
-      scanning = false;
-    }
+    if (inflight) return inflight;
+    return runScan();
   };
 
   /**
@@ -97,6 +114,9 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   };
 
   const proxy = new PortProxy((projectId) => resolveTarget(projectId, config.stablePorts[projectId]?.target));
+
+  /** 固定端口由 ProjectDeck 自己监听，不能算进任何项目 */
+  const stablePortSet = () => new Set(Object.values(config.stablePorts).map((value) => value.port));
 
   /** 固定端口池：9100-9199，跳过已被别的项目占用、或本机正在监听的端口 */
   const allocateStablePort = async (exceptId: string): Promise<number | undefined> => {
@@ -140,24 +160,44 @@ export async function start(argv: string[] = process.argv.slice(2)) {
       ...project,
       stablePort: {
         port: stable.port,
-        target: resolveTarget(project.id, stable.target),
+        // 项目没启动时也要显示钉住的目标，不然看起来像没配置
+        target: resolveTarget(project.id, stable.target) ?? stable.target,
         listening: proxy.isListening(project.id),
       },
     };
+  };
+
+  /**
+   * 停止后等一小会儿再查一次：进程组里跑掉的、detached 的孙进程，
+   * 只要 cwd 还在这个项目里，就一并回收，保证端口真的释放。
+   */
+  const sweepProjectListeners = async (project: Project): Promise<OwnedListener[]> => {
+    const projects = cache?.projects ?? [];
+    const deadline = Date.now() + 3000;
+    let alive = projectListeners(projects, project.id, process.pid, stablePortSet());
+    while (alive.length && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      alive = projectListeners(projects, project.id, process.pid, stablePortSet());
+    }
+    if (alive.length) {
+      await pm.reclaim(project.id, alive);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return alive;
   };
 
   const withRuntime = async (force = false): Promise<ScanResult> => {
     const result = await ensureScan(force);
     syncStablePorts(result.projects);
     // 端口状态每次都现场刷新，启动/停止后不用重新扫描整个目录
-    refreshObservedPorts(result.projects);
+    refreshObservedPorts(result.projects, stablePortSet());
     return {
       ...result,
       projects: sortProjects(result.projects.map((project) => withStablePort(decorate(project, pm)))),
     };
   };
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.0.2' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.1.0' }));
 
   app.get('/api/config', async () => ({
     roots: config.roots,
@@ -172,10 +212,45 @@ export async function start(argv: string[] = process.argv.slice(2)) {
 
   app.post('/api/scan', async () => withRuntime(true));
 
+  // 扫描进度：边扫边推，前端弹窗里实时显示目录数、收录数和最近发现的项目
+  app.get('/api/scan/stream', (request, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    reply.raw.write(': connected\n\n');
+
+    const send = (event: string, data: unknown) => {
+      try {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      } catch {}
+    };
+    const subscriber = (progress: ScanProgress) => send('progress', progress);
+    progressSubscribers.add(subscriber);
+
+    void (async () => {
+      try {
+        await runScan();
+        send('done', await withRuntime(false));
+      } catch (error) {
+        send('error', { message: String((error as Error)?.message ?? error) });
+      } finally {
+        progressSubscribers.delete(subscriber);
+        try {
+          reply.raw.end();
+        } catch {}
+      }
+    })();
+
+    request.raw.on('close', () => progressSubscribers.delete(subscriber));
+  });
+
   app.get('/api/projects/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await ensureScan();
-    refreshObservedPorts(result.projects);
+    refreshObservedPorts(result.projects, stablePortSet());
     const found = result.projects.find((item) => item.id === id);
     if (!found) return reply.code(404).send({ error: 'project not found' });
     const project = withStablePort(decorate(found, pm));
@@ -195,7 +270,8 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     const project = result.projects.find((item) => item.id === id);
     if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
     try {
-      return await pm.start(project);
+      // 启动前把这个项目遗留的所有监听（不只声明端口）先回收掉
+      return await pm.start(project, projectListeners(result.projects, project.id, process.pid, stablePortSet()));
     } catch (error) {
       return reply.code(400).send({ ok: false, error: String((error as Error)?.message ?? error) });
     }
@@ -216,10 +292,12 @@ export async function start(argv: string[] = process.argv.slice(2)) {
   app.post('/api/projects/:id/stop', async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await ensureScan();
-    if (!result.projects.some((item) => item.id === id)) {
-      return reply.code(404).send({ ok: false, error: 'project not found' });
-    }
-    return { ok: true, runtime: pm.stop(id) };
+    const project = result.projects.find((item) => item.id === id);
+    if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
+
+    pm.stop(id);
+    const swept = await sweepProjectListeners(project);
+    return { ok: true, runtime: pm.get(id), reclaimedPorts: swept.map((item) => item.port) };
   });
 
   app.post('/api/projects/:id/restart', async (request, reply) => {
@@ -228,7 +306,7 @@ export async function start(argv: string[] = process.argv.slice(2)) {
     const project = result.projects.find((item) => item.id === id);
     if (!project) return reply.code(404).send({ ok: false, error: 'project not found' });
     try {
-      return await pm.restart(project);
+      return await pm.restart(project, projectListeners(result.projects, project.id, process.pid, stablePortSet()));
     } catch (error) {
       return reply.code(400).send({ ok: false, error: String((error as Error)?.message ?? error) });
     }

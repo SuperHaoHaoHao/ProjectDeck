@@ -12,6 +12,7 @@ import {
 import type { Project, ProjectKind } from '@/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { ActionButton } from './ui/action-button';
 import { Badge } from './ui/badge';
 
 export const KIND_ICON = {
@@ -132,25 +133,14 @@ export function ProjectCard({
             <span className="max-w-[110px] truncate font-mono">{project.git.branch}</span>
           ) : null}
           {project.entry && onAction ? (
-            <button
-              type="button"
-              data-testid="card-action"
+            <ActionButton
+              size="xs"
+              tone={running ? 'stop' : 'start'}
+              label={running ? t('card.stop') : t('card.start')}
+              icon={running ? <Square size={9} /> : <Play size={9} />}
               disabled={busy}
-              title={running ? t('card.stop') : t('card.start')}
-              onClick={(event) => {
-                event.stopPropagation();
-                onAction(project, running ? 'stop' : 'start');
-              }}
-              className={cn(
-                'flex h-6 items-center gap-1 rounded-md border px-2 text-[10px] transition-colors disabled:opacity-40',
-                running
-                  ? 'border-red-500/30 text-red-300 hover:bg-red-500/10'
-                  : 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10',
-              )}
-            >
-              {running ? <Square size={9} /> : <Play size={9} />}
-              {running ? t('card.stop') : t('card.start')}
-            </button>
+              onClick={() => onAction(project, running ? 'stop' : 'start')}
+            />
           ) : (
             <Layers size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
           )}

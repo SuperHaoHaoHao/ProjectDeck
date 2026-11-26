@@ -59,6 +59,7 @@ export default function App() {
   const [scanOpen, setScanOpen] = useState(
     () => new URLSearchParams(window.location.search).get('scan') === '1',
   );
+  const [scanToken, setScanToken] = useState(0);
   const [busyId, setBusyId] = useState<string>();
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
 
@@ -93,17 +94,10 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const runScan = async () => {
+  const runScan = () => {
+    setScanOpen(true);
     setScanning(true);
-    try {
-      const result = await rescan();
-      setData(result);
-      setScanOpen(true);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setScanning(false);
-    }
+    setScanToken((value) => value + 1);
   };
 
   const showToast = (text: string, tone: 'ok' | 'error') => {
@@ -391,9 +385,17 @@ export default function App() {
       <ScanModal
         open={scanOpen}
         report={data}
-        scanning={scanning}
+        scanToken={scanToken}
         onClose={() => setScanOpen(false)}
         onRescan={runScan}
+        onResult={(result) => {
+          setData(result);
+          setScanning(false);
+        }}
+        onFailed={(message) => {
+          setError(message);
+          setScanning(false);
+        }}
       />
 
       {toast ? (

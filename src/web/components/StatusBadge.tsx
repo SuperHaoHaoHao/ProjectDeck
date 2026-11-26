@@ -34,7 +34,7 @@ export function StatusBadge({ status, failing }: { status: ProjectStatus; failin
     <span
       data-status={degraded ? 'degraded' : status}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px]',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px]',
         degraded ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : STYLE[status],
       )}
     >

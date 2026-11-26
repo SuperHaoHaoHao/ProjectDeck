@@ -344,7 +344,37 @@ export class ProcessManager extends EventEmitter {
     return rows.join('; ');
   }
 
-  async start(project: Project): Promise<StartResult> {
+  /** 启动前/停止后回收这个项目遗留的监听进程（按 cwd 归属判定，外部进程不在列表里） */
+  async reclaim(
+    projectId: string,
+    listeners: { port: number; pid: number; cwd?: string }[],
+  ): Promise<void> {
+    for (const item of listeners) {
+      this.append(
+        projectId,
+        `\u001b[33m[projectdeck] 回收旧进程 pid=${item.pid}（:${item.port}${item.cwd ? `, ${item.cwd}` : ''}）\u001b[0m\n`,
+      );
+      try {
+        process.kill(item.pid, 'SIGTERM');
+      } catch {}
+
+      const softDeadline = Date.now() + 2000;
+      while (Date.now() < softDeadline && (await isPortOpen(item.port))) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (await isPortOpen(item.port)) {
+        try {
+          process.kill(item.pid, 'SIGKILL');
+        } catch {}
+        const hardDeadline = Date.now() + 1000;
+        while (Date.now() < hardDeadline && (await isPortOpen(item.port))) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+    }
+  }
+
+  async start(project: Project, stale: { port: number; pid: number; cwd?: string }[] = []): Promise<StartResult> {
     if (!project.entry) {
       return {
         ok: false,
@@ -354,6 +384,7 @@ export class ProcessManager extends EventEmitter {
     }
     if (this.isRunning(project.id)) return { ok: true, runtime: this.get(project.id) };
 
+    if (stale.length) await this.reclaim(project.id, stale);
     await this.releaseProjectPorts(project);
 
     const { exit } = await this.spawnEntry(project, project.entry, 'run', [project.entry.cmd, ...project.entry.args].join(' '));
@@ -435,10 +466,13 @@ export class ProcessManager extends EventEmitter {
     });
   }
 
-  async restart(project: Project): Promise<StartResult> {
+  async restart(
+    project: Project,
+    stale: { port: number; pid: number; cwd?: string }[] = [],
+  ): Promise<StartResult> {
     this.stop(project.id);
     await new Promise((resolve) => setTimeout(resolve, 900));
-    return this.start(project);
+    return this.start(project, stale);
   }
 
   shutdown() {

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Check, Copy, Download, Play, RotateCw, Square } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Download, Play, RotateCw, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,29 +6,13 @@ import { fetchProject, type Project } from '@/api';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { CopyButton } from './CopyButton';
 import { StablePortCard, type StablePortChange } from './StablePortCard';
 import { Terminal } from './Terminal';
 import { KIND_ICON, kindLabel } from './ProjectCard';
 import { StatusBadge } from './StatusBadge';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-
-function CopyButton({ value }: { value: string }) {
-  const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
-  return (
-    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copy} title={t('common.copy')}>
-      {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-    </Button>
-  );
-}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -53,9 +37,8 @@ export function ProjectDetail({
   onStablePort: (project: Project, change: StablePortChange) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'overview' | 'terminal'>(
-    project.status === 'running' ? 'terminal' : 'overview',
-  );
+  // 进来先看概览；只有从停止切到运行、或者启动失败时才自动跳到终端
+  const [tab, setTab] = useState<'overview' | 'terminal'>('overview');
   const [readme, setReadme] = useState('');
   const [loading, setLoading] = useState(true);
   const wasRunning = useRef(project.status === 'running');

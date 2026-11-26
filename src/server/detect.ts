@@ -265,7 +265,16 @@ export function detect(dir: string): Detection | null {
   if (deps.tailwindcss || deps['@tailwindcss/vite']) addStack('Tailwind');
   if (deps.express) addStack('Express');
   if (deps.fastify) addStack('Fastify');
+  if (deps.koa) addStack('Koa');
+  if (deps.hono) addStack('Hono');
   if (deps.typeorm || deps['@nestjs/typeorm'] || deps.prisma || deps['@prisma/client']) addStack('ORM');
+  // 样式 / 数据库这类「非框架」依赖也要能显示，否则纯 Node + Sass 的项目技术栈会是空的
+  if (deps.sass || deps['node-sass'] || deps['sass-embedded']) addStack('Sass');
+  if (deps.pg) addStack('PostgreSQL');
+  if (deps.mysql || deps.mysql2) addStack('MySQL');
+  if (deps.sqlite3 || deps['better-sqlite3']) addStack('SQLite');
+  if (deps.mongoose || deps.mongodb) addStack('MongoDB');
+  if (deps.redis || deps.ioredis) addStack('Redis');
   if (runtime === 'python') addStack('Python');
   if (runtime === 'go') addStack('Go');
   if (runtime === 'rust') addStack('Rust');
@@ -273,6 +282,21 @@ export function detect(dir: string): Detection | null {
   if (runtime === 'swift') addStack('Swift');
   if (runtime === 'android') addStack('Kotlin');
   if (isCompose) addStack('Docker');
+
+  // 兜底：至少让用户知道这是什么语言写的，不要出现空白技术栈
+  if (stack.length === 0) {
+    const fallback: Record<Runtime, string> = {
+      node: 'Node.js',
+      python: 'Python',
+      go: 'Go',
+      rust: 'Rust',
+      java: 'Java',
+      swift: 'Swift',
+      android: 'Kotlin',
+      none: 'Files',
+    };
+    addStack(fallback[runtime]);
+  }
 
   // version
   let version: string | undefined = pkg?.version;
