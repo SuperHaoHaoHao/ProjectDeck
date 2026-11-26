@@ -115,9 +115,11 @@ MCP server（stdio + HTTP）在 v0.1 路线里：让 Claude Code / Kimi / Codex 
 | v0.3 | 「收养」外部进程、历史指标、项目笔记与标签 |
 | v1.0 | 配方市场、Tauri 桌面端、多机管理 |
 
-## 设计文档
+## 设计与贡献
 
-立项与完整设计：[`../docs/ideas/2026-11-26-本机项目管理平台-立项.md`](../docs/ideas/2026-11-26-本机项目管理平台-立项.md)
+- 架构与设计：[`docs/design.md`](./docs/design.md)
+- 贡献指南：[`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- Agent 协作约定：[`AGENTS.md`](./AGENTS.md)
 
 ## License
 
