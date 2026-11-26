@@ -1,0 +1,102 @@
+# ProjectDeck
+
+> Local project catalog and control deck for AI-built projects. Scans your dev folders, discovers runnable projects, and gives you one local web UI to inspect, start, stop, and watch logs.
+
+ProjectDeck is a local-only web application (Node.js + React) for developers who accumulate dozens of AI-generated repositories across Node, Python, Go, Rust, Java, Swift, Android, Electron, uni-app, and Docker. It solves three problems: not knowing which projects exist, not remembering what each one is, and not having one place to start/stop them.
+
+## What it solves
+
+- **Discovery**: scans configured roots and nested repositories; finds services, desktop apps, mini programs, and mobile projects.
+- **Understanding**: detects tech stack, reads README, shows path, version, git branch, last commit, build artifacts, and creation date.
+- **Control**: starts and stops projects from the browser, with real-time streaming logs (SSE + ANSI colors) and accurate running state based on port ownership, not just open ports.
+
+## Core features (v0.0.2)
+
+- Zero-config scan of `~/Code` (configurable roots, depth, ignore list)
+- Only runnable projects are indexed; docs-only and pure packages are filtered with reasons
+- Scan report modal: roots, rules, scanned directory count, filtered items, errors, duration
+- Backend-style layout: sidebar + dashboard + project list + detail page
+- One-click start / stop / restart for projects with a start command
+- Live terminal view with ANSI colors, auto-scroll, pause, and clear
+- Port ownership check via `lsof` so a port used by another project does not mark this one running
+- Sortable list view with creation date and last operation
+- Local HTTP API and hash routes (`#/dashboard`, `#/projects`, `#/project/:id`, `#/settings`)
+
+## Quick start
+
+```bash
+npm install
+npm run build
+npm start
+# open http://127.0.0.1:4321
+```
+
+Development:
+
+```bash
+npm run dev
+# API 4321, Vite 5310
+```
+
+Options:
+
+```bash
+projectdeck --root ~/Code --root ~/Work --port 4400 --no-open
+projectdeck --all   # also show docs-only and package projects
+```
+
+## How scanning works
+
+1. Walk each root up to `maxDepth`.
+2. Detect project markers: `package.json`, `manifest.json` + `pages.json`, `*.xcodeproj`, `Package.swift`, `AndroidManifest.xml`, `go.mod`, `Cargo.toml`, `pom.xml`, `requirements.txt`, `pyproject.toml`, `compose.yaml`.
+3. Index only projects that can run: have a start command, or are desktop/mini-program/mobile projects.
+4. Skip `node_modules`, `.git`, `dist`, `build`, `uni_modules`, `sdk`, `HBuilder-*`, `Android-SDK*`, `examples`, and similar.
+5. Stop descending after a project is identified, except into `plugins/`.
+
+## Start / stop / logs
+
+- Start uses the detected entry command, e.g. `npm run dev`, `python3 app.py`, `go run .`.
+- Each project runs in its own process group so stopping kills the whole tree (npm → vite → node).
+- stdout/stderr are captured, kept in a ring buffer, written to `~/.projectdeck/logs/<id>.log`, and streamed to the UI over SSE.
+- Running state is verified by matching the listening port to the process working directory.
+
+## Configuration
+
+`~/.projectdeck/config.json`
+
+```json
+{
+  "port": 4321,
+  "host": "127.0.0.1",
+  "roots": ["/Users/you/Code"],
+  "maxDepth": 6,
+  "ignore": ["my-vendor-dir"]
+}
+```
+
+Runtime state: `~/.projectdeck/runtime.json`
+Logs: `~/.projectdeck/logs/<project-id>.log`
+
+## API
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/projects` | Project list with runtime state |
+| POST | `/api/scan` | Rescan and return a report |
+| GET | `/api/projects/:id` | Project detail + README |
+| POST | `/api/projects/:id/start` | Start |
+| POST | `/api/projects/:id/stop` | Stop |
+| POST | `/api/projects/:id/restart` | Restart |
+| GET | `/api/projects/:id/logs` | Recent logs |
+| GET | `/api/projects/:id/logs/stream` | SSE log stream |
+| GET | `/api/runtime` | Runtime states |
+| GET | `/api/config` | Current config |
+
+## Status
+
+Early alpha. Implemented: scan, catalog, dashboard, list, detail, start/stop/restart, live logs, scan report.
+Planned: MCP server (stdio + HTTP), GitHub import, FRP read-only panel, pm2/Docker drivers, Tauri desktop shell.
+
+## Keywords
+
+local project manager, developer dashboard, process manager, dev server manager, project catalog, AI-generated projects, pm2 alternative, start stop restart, live logs, SSE, self-hosted, local-first, macOS, TypeScript, React, Fastify.
